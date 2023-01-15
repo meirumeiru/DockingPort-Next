@@ -1,0 +1,14 @@
+*.vspscc
+*.vssscc
+*.scc
+*.suo
+*.user
+
+/*.bat
+
+/DockingPort-Next/*.sln
+
+/_release/
+
+/DockingPort-Next/DockingPort-Next/bin/
+/DockingPort-Next/DockingPort-Next/obj/
