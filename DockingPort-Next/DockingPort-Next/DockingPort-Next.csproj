@@ -92,6 +92,7 @@
     <None Include="Module\DockingPortEx.cs" />
     <None Include="Module\DockingPortEx2.cs" />
     <None Include="Module\DockingPortExMini.cs" />
+    <Compile Include="Module\ModuleTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
