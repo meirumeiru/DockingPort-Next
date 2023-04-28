@@ -906,8 +906,6 @@ namespace DockingPort_Next.Module
 
 						if(distance.magnitude < detectionDistance)
 						{
-							DockDistance = distance.magnitude.ToString();
-
 							angle = Vector3.Angle(nodeTransform.forward, -DockingNodeEx_.nodeTransform.forward);
 
 							if((angle <= 15f) && (distance.magnitude <= approachingDistance))
@@ -958,7 +956,7 @@ namespace DockingPort_Next.Module
 
 						if(angle <= 15f)
 						{
-							DockDistance = distance.magnitude.ToString();
+							DockDistance = distance.magnitude.ToString("N2");
 							return;
 						}
 					}
@@ -970,6 +968,8 @@ namespace DockingPort_Next.Module
 			{
 				if((to == st_extended) || (to == st_retracting))
 				{
+					DockDistance = "-";
+
 					otherPort.fsm.RunEvent(otherPort.on_distanced);
 				}
 			};
@@ -998,7 +998,7 @@ namespace DockingPort_Next.Module
 			{
 				float relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
 
-				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString();
+				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 
 				if(relevantDistance <= captureDistance)
 					fsm.RunEvent(on_capture);
@@ -1036,7 +1036,7 @@ namespace DockingPort_Next.Module
 				{
 					relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
 
-					DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString();
+					DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 				}
 				else
 					relevantDistance = 10f;
@@ -1181,7 +1181,7 @@ namespace DockingPort_Next.Module
 			{
 				float relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
 
-				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString();
+				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 
 				if(relevantDistance > (maxExtensionLength - extensionLength) * 1.4f)
 				{
@@ -1873,7 +1873,7 @@ _pushStep = 1f;
 		public string DockStatus = "Ready";
 
 		[KSPField(guiName = "DockingNode distance", isPersistant = false, guiActive = true)]
-		public string DockDistance;
+		public string DockDistance = "-";
 
 // FEHLER, DockAngle noch? und evtl. die Anzeige als... weiss ned... evtl. immer zulassen? aber nur wenn approaching? also im DockingNodeEx?? weil der zählt schon ohne approaching zu sein
 
@@ -1993,8 +1993,6 @@ ahiSofort(position1, position2, position2, tm, tf);
 ahiSofort(position1, position2, position2, tm, tf);
 		}
 
-static float undockEjectionForce = 1f; // FEHLER, default ist 10f bei "normalem" Port -> 0.1f war's bei mir, aber reicht vielleicht nicht
-
 		void DeactivateColliders(Vessel v)
 		{
 			Collider[] colliders = part.transform.GetComponentsInChildren<Collider>(true);
@@ -2021,36 +2019,36 @@ Transform tf; FlightCamera.TargetMode tm;
 
 ahiSofort(position1, position2, position2, tm, tf);
 
-otherPort.DeactivateColliders(vessel);
-DeactivateColliders(otherPort.vessel);
-
+			otherPort.DeactivateColliders(vessel);
+			DeactivateColliders(otherPort.vessel);
 
 			ConfigurableJoint j = part.gameObject.AddComponent<ConfigurableJoint>();
 			j.connectedBody = otherPort.part.rb;
 			j.axis = j.transform.InverseTransformDirection(nodeTransform.forward);
+
+			JointDrive strf = new JointDrive();
+			strf.maximumForce = 1000000f; strf.positionSpring = 1000000f;
+
 			j.xMotion = ConfigurableJointMotion.Free;
 			j.yMotion = ConfigurableJointMotion.Free;
 			j.zMotion = ConfigurableJointMotion.Free;
-JointDrive strf = new JointDrive();
-			strf.maximumForce = 1000000f; strf.positionSpring = 1000000f;
 
-j.yDrive = j.zDrive = strf;
-	j.xDrive = strf;
-			j.angularXMotion = j.angularYMotion = j.angularZMotion = ConfigurableJointMotion.Free;
+			j.xDrive = j.yDrive = j.zDrive = strf;
 
-j.angularXDrive = j.angularYZDrive = strf;
+			j.angularXMotion = ConfigurableJointMotion.Free;
+			j.angularYMotion = ConfigurableJointMotion.Free;
+			j.angularZMotion = ConfigurableJointMotion.Free;
 
-//StartCoroutine(killAngVel(vessel, 50, parent.rb.angularVelocity));
-StartCoroutine(killAngVel2(j, 50,
-	Mathf.Min(vessel.GetTotalMass(), otherPort.vessel.GetTotalMass())
-	
-	));
+			j.angularXDrive = j.angularYZDrive = strf;
+
+
+			StartCoroutine(killAngVel2(j, 50, Mathf.Min(vessel.GetTotalMass(), otherPort.vessel.GetTotalMass())));
 
 /*
-if(undockEjectionForce > 0.001f)
+			if(undockEjectionForce > 0.001f)
 			{
-			part.AddForce(nodeTransform.forward * ((0f - undockEjectionForce) * 0.5f));
-			parent.AddForce(nodeTransform.forward * (undockEjectionForce * 0.5f));
+				part.AddForce(nodeTransform.forward * ((0f - undockEjectionForce) * 0.5f));
+				parent.AddForce(nodeTransform.forward * (undockEjectionForce * 0.5f));
 			}
 */
 
@@ -2073,7 +2071,6 @@ ahiSofort(position1, position2, position2, tm, tf);
 */
 		}
 
-static bool dozeroinstead = true;
 static int froverride = 200;
 
 		IEnumerator killAngVel2(ConfigurableJoint j, int fr, float mass)
