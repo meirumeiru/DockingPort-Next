@@ -50,6 +50,15 @@ namespace DockingPort_Next.Module
 		[KSPField(isPersistant = false), SerializeField]
 		public float pushSpeed = 0.01f;
 
+		[KSPField(isPersistant = false), SerializeField]
+		public float detectionDistance = 5f;
+
+		[KSPField(isPersistant = false), SerializeField]
+		public float approachingDistance = 1f;
+
+		[KSPField(isPersistant = false), SerializeField]
+		public float captureDistance = 0.005f;
+
 // FEHLER, nodeTypes und so Zeugs noch einbauen -> damit ich nur docken kann mit den passenden Teils und nicht mit allem
 
 		[KSPField(isPersistant = true)]
@@ -85,8 +94,6 @@ namespace DockingPort_Next.Module
 		public Transform controlTransform;
 
 		public KerbalFSM fsm;
-
-// FEHLER, pre-attached noch einbauen
 
 		public KFSMState st_ready;			// "passive"
 
@@ -148,6 +155,10 @@ namespace DockingPort_Next.Module
 
 		public KFSMEvent on_undock;
 
+		// Sounds
+
+// FEHLER, könnte man noch hinzufügen -> siehe LEE oder halt original Node?
+
 		// Ring
 
 		private Transform Ring = null;
@@ -161,17 +172,11 @@ namespace DockingPort_Next.Module
 		private Vector3 extendDirection;
 		private float extendPosition = 0f;
 
-		private float detectionDistance = 5f;
-
-		private ModuleDockingPortEx otherPort;
-
 // FEHLER, nicht nötig als Variable hier... denke ich mal... weil das nur immer temporär existiert
 		private Quaternion ActiveJointTargetRotation;
 		private Vector3 ActiveJointTargetPosition;
 
 		private float _pushStep = 0f;
-
-		private float captureDistance = 0.005f;
 
 		private ConfigurableJoint CaptureJoint;
 
@@ -191,7 +196,10 @@ namespace DockingPort_Next.Module
 
 		// Docking
 
-		private uint dockedPartUId;
+		public ModuleDockingPortEx otherPort;
+		public uint dockedPartUId;
+
+		public DockedVesselInfo vesselInfo;
 
 		private DockingPortStatus _state = null;
 
@@ -329,7 +337,7 @@ namespace DockingPort_Next.Module
 		{
 			base.OnSave(node);
 
-			node.AddValue("state", (string)(((fsm != null) && (fsm.Started)) ? fsm.currentStateName : "Ready"));
+			node.AddValue("state", (string)(((fsm != null) && (fsm.Started)) ? fsm.currentStateName : DockStatus));
 
 			node.AddValue("dockUId", dockedPartUId);
 
@@ -572,6 +580,17 @@ namespace DockingPort_Next.Module
 			}
 
 			SetupFSM();
+
+			if((DockStatus == "Approaching")
+			|| (DockStatus == "Captured")
+			|| (DockStatus == "Capture released"))
+			{
+				if(otherPort != null)
+				{
+					while((otherPort.fsm == null) || (!otherPort.fsm.Started))
+						yield return null;
+				}
+			}
 
 			fsm.StartFSM(DockStatus);
 		}
@@ -891,8 +910,11 @@ namespace DockingPort_Next.Module
 
 							angle = Vector3.Angle(nodeTransform.forward, -DockingNodeEx_.nodeTransform.forward);
 
-							if((angle <= 15f) && (distance.magnitude <= 1f))
+							if((angle <= 15f) && (distance.magnitude <= approachingDistance))
 							{
+								// we don't expect to see multiple matching ports in the same area
+								// that's why we don't continue to search and simply take the first we find
+
 								otherPort = DockingNodeEx_;
 								dockedPartUId = otherPort.part.flightID;
 
@@ -930,7 +952,7 @@ namespace DockingPort_Next.Module
 				{
 					Vector3 distance = otherPort.Ring.transform.position - RingObject.transform.position;
 
-					if(distance.magnitude < detectionDistance)
+					if(distance.magnitude < 1.5f * approachingDistance)
 					{
 						float angle = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 
@@ -1152,7 +1174,8 @@ namespace DockingPort_Next.Module
 				Events["PerformDocking"].active = false;
 				Events["RetractRing"].active = true;
 
-				otherPort.fsm.RunEvent(otherPort.on_released);
+				if(otherPort != null)
+					otherPort.fsm.RunEvent(otherPort.on_released);
 			};
 			st_uncaptured.OnFixedUpdate = delegate
 			{
@@ -1275,7 +1298,10 @@ namespace DockingPort_Next.Module
 
 				extendPosition = 0f;
 
+if(vessel.GetTotalMass() < otherPort.vessel.GetTotalMass()) // FEHLER, ich prüf nur die Masse, "dominant Vessel" prüft noch anderes, finde ich aber nicht so gut
 				DockToVessel(otherPort);
+else
+				otherPort.DockToVessel(this); // FEHLER, nie geprüft ob's ginge
 
 				Destroy(CaptureJoint);
 				CaptureJoint = null;
@@ -1676,7 +1702,7 @@ _captureRotationB =
 			ConfigurableJoint joint = gameObject.AddComponent<ConfigurableJoint>();
 			joint.connectedBody = otherPort.GetComponent<Rigidbody>();
 
-			joint.breakForce = joint.breakTorque = Mathf.Infinity;
+			joint.breakForce = joint.breakTorque = Mathf.Infinity;			// FEHLER, hier was konfigurierbares machen, damit er brechen kann und dann auch das brechen behandeln
 
 			joint.xMotion = ConfigurableJointMotion.Free;
 			joint.yMotion = ConfigurableJointMotion.Free;
@@ -1766,18 +1792,6 @@ _pushStep = 1f;
 			}
 		}
 
-		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Release")]
-		public void Release()
-		{
-			fsm.RunEvent(on_release);
-		}
-
-		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Perform Docking")]
-		public void PerformDocking()
-		{
-			fsm.RunEvent(on_preparedocking);
-		}
-
 		////////////////////////////////////////
 		// Update-Functions
 
@@ -1856,10 +1870,12 @@ _pushStep = 1f;
 		// Context Menu
 
 		[KSPField(guiName = "DockingNode status", isPersistant = false, guiActive = true, guiActiveUnfocused = true, unfocusedRange = 20)]
-		public string DockStatus = "";
+		public string DockStatus = "Ready";
 
 		[KSPField(guiName = "DockingNode distance", isPersistant = false, guiActive = true)]
 		public string DockDistance;
+
+// FEHLER, DockAngle noch? und evtl. die Anzeige als... weiss ned... evtl. immer zulassen? aber nur wenn approaching? also im DockingNodeEx?? weil der zählt schon ohne approaching zu sein
 
 		public void Enable()
 		{
@@ -1892,7 +1908,17 @@ _pushStep = 1f;
 			fsm.RunEvent(on_retract);
 		}
 
-		public DockedVesselInfo vesselInfo;
+		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Release")]
+		public void Release()
+		{
+			fsm.RunEvent(on_release);
+		}
+
+		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Perform Docking")]
+		public void PerformDocking()
+		{
+			fsm.RunEvent(on_preparedocking);
+		}
 
 		public void DockToVessel(ModuleDockingPortEx port)
 		{
