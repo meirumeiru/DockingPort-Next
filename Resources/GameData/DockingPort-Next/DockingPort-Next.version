@@ -1,0 +1,24 @@
+{
+  "NAME"     : "DockingPort Next",
+  "DOWNLOAD" : "https://github.com/meirumeiru/DockingPort-Next/releases",
+  "URL"      : "https://github.com/meirumeiru/DockingPort-Next/raw/master/Resources/GameData/DockingPort-Next/DockingPort-Next.version",
+  "GITHUB" : {
+      "USERNAME"   : "meirumeiru",
+      "REPOSITORY" : "DockingPort-Next"
+  },
+  "VERSION" : {
+    "MAJOR" : 1,
+    "MINOR" : 0,
+    "PATCH" : 0
+  },
+  "KSP_VERSION" : {
+    "MAJOR" : 1,
+    "MINOR" : 12,
+    "PATCH" : 3
+  },
+  "KSP_VERSION_MIN" : {
+    "MAJOR" : 1,
+    "MINOR" : 12,
+    "PATCH" : 0
+  }
+}
