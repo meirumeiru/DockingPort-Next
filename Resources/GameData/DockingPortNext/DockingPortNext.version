@@ -1,7 +1,7 @@
 {
   "NAME"     : "DockingPort Next",
   "DOWNLOAD" : "https://github.com/meirumeiru/DockingPort-Next/releases",
-  "URL"      : "https://github.com/meirumeiru/DockingPort-Next/raw/master/Resources/GameData/DockingPort-Next/DockingPort-Next.version",
+  "URL"      : "https://github.com/meirumeiru/DockingPort-Next/raw/main/Resources/GameData/DockingPortNext/DockingPortNext.version",
   "GITHUB" : {
       "USERNAME"   : "meirumeiru",
       "REPOSITORY" : "DockingPort-Next"

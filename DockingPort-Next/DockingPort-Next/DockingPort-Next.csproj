@@ -8,8 +8,8 @@
     <ProjectGuid>{6FB73B23-171A-485F-8B35-3EC8837862A0}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DockingPort_Next</RootNamespace>
-    <AssemblyName>DockingPort-Next</AssemblyName>
+    <RootNamespace>DockingPortNext</RootNamespace>
+    <AssemblyName>DockingPortNext</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -41,8 +41,8 @@
     <Reference Include="Assembly-CSharp">
       <HintPath>C:\KerbalSpaceProgram_1.12.3\KSP_x64_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
-    <Reference Include="AttachmentAndDockingTools">
-      <HintPath>..\..\..\AttachmentAndDockingTools\AttachmentAndDockingTools\AttachmentAndDockingTools\bin\Debug\AttachmentAndDockingTools.dll</HintPath>
+    <Reference Include="DockingFunctions">
+      <HintPath>..\..\..\DockingFunctions\DockingFunctions\DockingFunctions\bin\Debug\DockingFunctions.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="UnityEngine">

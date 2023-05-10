@@ -36,4 +36,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("1.0.1.0")]
 
 
-[assembly: KSPAssemblyDependency("AttachmentAndDockingTools", 1, 0)]
+[assembly: KSPAssemblyDependency("DockingFunctions", 1, 0)]
