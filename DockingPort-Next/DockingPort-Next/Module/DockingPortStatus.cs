@@ -23,6 +23,8 @@ namespace DockingPort_Next
 		public Quaternion originalRingObjectLocalRotation;
 
 		// onrails
+		public bool followOtherPort = false;
+
 		public Vector3 otherPortRelativePosition;
 		public Quaternion otherPortRelativeRotation;
 
@@ -40,6 +42,8 @@ namespace DockingPort_Next
 
 			node.TryGetValue("originalRingObjectLocalPosition", ref originalRingObjectLocalPosition);
 			node.TryGetValue("originalRingObjectLocalRotation", ref originalRingObjectLocalRotation);
+
+			node.TryGetValue("followOtherPort", ref followOtherPort);
 
 			node.TryGetValue("otherPortRelativePosition", ref otherPortRelativePosition);
 			node.TryGetValue("otherPortRelativeRotation", ref otherPortRelativeRotation);
@@ -59,6 +63,8 @@ namespace DockingPort_Next
 
 			if(originalRingObjectLocalPosition != null)	node.AddValue("originalRingObjectLocalPosition", originalRingObjectLocalPosition);
 			if(originalRingObjectLocalRotation != null)	node.AddValue("originalRingObjectLocalRotation", originalRingObjectLocalRotation);
+
+			node.AddValue("followOtherPort", followOtherPort);
 
 			if(otherPortRelativePosition != null)	node.AddValue("otherPortRelativePosition", otherPortRelativePosition);
 			if(otherPortRelativeRotation != null)	node.AddValue("otherPortRelativeRotation", otherPortRelativeRotation);

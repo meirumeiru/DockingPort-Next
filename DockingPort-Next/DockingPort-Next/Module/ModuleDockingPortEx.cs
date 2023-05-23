@@ -6,7 +6,7 @@ using KSP.IO;
 using UnityEngine;
 
 using DockingPort_Next.Utility;
-using AttachmentAndDockingTools;
+using DockingFunctions;
 
 namespace DockingPort_Next.Module
 {
@@ -212,7 +212,7 @@ namespace DockingPort_Next.Module
 		private Vector3 ringRelativePosition;
 		private Quaternion ringRelativeRotation;
 
-		private bool followOtherPort = false;			// FEHLER, temp noch drin, später raus
+		private bool followOtherPort = false;
 
 		private Vector3 otherPortRelativePosition;
 		private Quaternion otherPortRelativeRotation;
@@ -260,6 +260,14 @@ namespace DockingPort_Next.Module
 				_state.Load(node.GetNode("PORTSTATUS"));
 			}
 
+			if(node.HasValue("followOtherPort"))
+			{
+				followOtherPort = bool.Parse(node.GetValue("followOtherPort"));
+
+				node.TryGetValue("otherPortRelativePosition", ref otherPortRelativePosition);
+				node.TryGetValue("otherPortRelativeRotation", ref otherPortRelativeRotation);
+			}
+
 			part.fuelCrossFeed = crossfeed;
 		}
 
@@ -301,6 +309,8 @@ namespace DockingPort_Next.Module
 				state.originalRingObjectLocalPosition = originalRingObjectLocalPosition;
 				state.originalRingObjectLocalRotation = originalRingObjectLocalRotation;
 
+				state.followOtherPort = followOtherPort;
+
 				state.otherPortRelativePosition = Quaternion.Inverse(otherPort.part.transform.rotation) * (vessel.transform.position - otherPort.part.transform.position);
 				state.otherPortRelativeRotation = Quaternion.Inverse(otherPort.part.transform.rotation) * vessel.transform.rotation;
 			}
@@ -316,6 +326,8 @@ namespace DockingPort_Next.Module
 
 				state.originalRingObjectLocalPosition = originalRingObjectLocalPosition;
 				state.originalRingObjectLocalRotation = originalRingObjectLocalRotation;
+
+				state.followOtherPort = followOtherPort;
 
 				state.otherPortRelativePosition = Quaternion.Inverse(otherPort.part.transform.rotation) * (vessel.transform.position - otherPort.part.transform.position);
 				state.otherPortRelativeRotation = Quaternion.Inverse(otherPort.part.transform.rotation) * vessel.transform.rotation;
@@ -486,12 +498,13 @@ namespace DockingPort_Next.Module
 
 				RingObject.transform.parent = transform;
 
+				followOtherPort = _state.followOtherPort;
+
 				otherPortRelativePosition = _state.otherPortRelativePosition;
 				otherPortRelativeRotation = _state.otherPortRelativeRotation;
 
-				followOtherPort = true;
-
-				ShipCoordinator.Register(vessel, otherPort.part, otherPortRelativePosition, otherPortRelativeRotation);
+				if(followOtherPort)
+					VesselPositionManager.OnLoad(vessel, otherPort.part, otherPortRelativePosition, otherPortRelativeRotation);
 			}
 
 			if((DockStatus == "Latched")
@@ -512,6 +525,7 @@ namespace DockingPort_Next.Module
 
 		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
 
+// FEHLER FEHLER -> das hier geht schief, wenn der rb vom otherPort noch nicht existiert... das sollte er zwar, aber... bei GF's z.B., die keine physik-Objekte sind, kommt das erst später, daher... ist das doof... müsste man evtl. warten auf .started vom Part?
 				BuildCaptureJoint(otherPort);
 				BuildCaptureJoint2();
 
@@ -545,12 +559,14 @@ namespace DockingPort_Next.Module
 
 				RingObject.transform.parent = transform;
 
+// FEHLER, irgendwie doof, wieso nehmen wir das nicht einfach aus diesen if's raus und tun's immer, wenn's true ist?
+				followOtherPort = _state.followOtherPort;
+
 				otherPortRelativePosition = _state.otherPortRelativePosition;
 				otherPortRelativeRotation = _state.otherPortRelativeRotation;
 
-				followOtherPort = true;
-
-				ShipCoordinator.Register(vessel, otherPort.part, otherPortRelativePosition, otherPortRelativeRotation);
+				if(followOtherPort)
+					VesselPositionManager.OnLoad(vessel, otherPort.part, otherPortRelativePosition, otherPortRelativeRotation);
 			}
 
 // FEHLER, fehlt noch total
@@ -560,6 +576,8 @@ namespace DockingPort_Next.Module
 
 			if(DockStatus == "Docked")
 			{
+				if(Vessel.GetDominantVessel(vessel, otherPort.vessel) == vessel)
+					DockingHelper.OnLoad(this, vesselInfo, otherPort, otherPort.vesselInfo);
 			}
 
 			if((DockStatus == "Ready")
@@ -645,10 +663,17 @@ namespace DockingPort_Next.Module
 					ringRelativeRotation = RingObject.transform.localRotation;
 
 					RingObject.transform.parent = transform;
+				}
 
-					followOtherPort = true;
-
-					ShipCoordinator.Register(part, otherPort.part, true, out otherPortRelativePosition, out otherPortRelativeRotation);
+				if((DockStatus == "Target")
+				|| (DockStatus == "Captured")
+				|| (DockStatus == "Latched"))
+				{
+					if(Vessel.GetDominantVessel(vessel, otherPort.vessel) == otherPort.vessel)
+					{
+						followOtherPort = true;
+						VesselPositionManager.Register(part, otherPort.part, true, out otherPortRelativePosition, out otherPortRelativeRotation);
+					}
 				}
 			}
 		}
@@ -657,12 +682,13 @@ namespace DockingPort_Next.Module
 		{
 			if(vessel == v)
 			{
-				if((DockStatus == "Captured")
+				if((DockStatus == "Target")
+				|| (DockStatus == "Captured")
 				|| (DockStatus == "Latched"))
 				{
+					if(followOtherPort)
+						VesselPositionManager.Unregister(vessel);
 					followOtherPort = false;
-
-					ShipCoordinator.Unregister(vessel);
 				}
 
 				StartCoroutine(OnUnpackDelayed());
@@ -1958,19 +1984,6 @@ _pushStep = 1f;
 
 		public void DockToVessel(ModuleDockingPortEx port)
 		{
-Vector3 position1, position2;
-Transform tf; FlightCamera.TargetMode tm;
-
-//HierarchyUtil alles umbauen versuchen auf common classes... wobei, damit dem ahi ist noch
-//etwas doof... aber, ich krieg's schon hin... evtl. kann ich ja direkt switchen oder sowas
-
-position1 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetPivot().position);
-position2 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetCameraTransform().position);
-tf = FlightCamera.fetch.Target;
-tm = FlightCamera.fetch.targetMode;
-
-	//		StartCoroutine(ahi(position1, position2, position2, tm, tf));
-
 			Debug.Log("Docking to vessel " + port.vessel.GetDisplayName(), gameObject);
 
 			otherPort = port;
@@ -1979,80 +1992,12 @@ tm = FlightCamera.fetch.targetMode;
 			otherPort.otherPort = this;
 			otherPort.dockedPartUId = part.flightID;
 
-
-DockingHelper.DisableCameraSwitch();
-
-// FEHLER, hier neues komplettpacket für's Docking nutzen
+			DockingHelper.SaveCameraPosition(part);
+			DockingHelper.SuspendCameraSwitch(10);
 
 			DockingHelper.DockVessels(this, otherPort);
 
-/*
-			vesselInfo = new DockedVesselInfo();
-			vesselInfo.name = vessel.vesselName;
-			vesselInfo.vesselType = vessel.vesselType;
-			vesselInfo.rootPartUId = vessel.rootPart.flightID;
-
-			otherPort.vesselInfo = new DockedVesselInfo();
-			otherPort.vesselInfo.name = otherPort.vessel.vesselName;
-			otherPort.vesselInfo.vesselType = otherPort.vessel.vesselType;
-			otherPort.vesselInfo.rootPartUId = otherPort.vessel.rootPart.flightID;
-
-			uint data = vessel.persistentId;
-			uint data2 = otherPort.vessel.persistentId;
-
-			Vessel oldvessel = vessel;
-
-			GameEvents.onVesselDocking.Fire(data, data2);
-			GameEvents.onActiveJointNeedUpdate.Fire(otherPort.vessel);
-			GameEvents.onActiveJointNeedUpdate.Fire(vessel);
-
-
-			DockingHelper.orgInfo orgInfo = DockingHelper.BuildOrgInfo(vessel);
-
-			Vector3 part_orgPos; Quaternion part_orgRot;
-			DockingHelper.DockToVessel(port.part, port.nodeTransform, port.dockingOrientation, part, nodeTransform, dockingOrientation, snapCount, out part_orgPos, out part_orgRot);
-
-			vessel.IgnoreGForces(10);
-
-			DockingHelper.DisableDockingEase(otherPort.vessel);
-
-			part.Couple(otherPort.part);
-
-			DockingHelper.ReRootOrgInfo(orgInfo, part);
-			DockingHelper.MoveOrgInfo(orgInfo, part_orgPos, part_orgRot);
-
-			DockingHelper.ApplyOrgInfo(orgInfo, otherPort.vessel);
-
-
-			GameEvents.onVesselPersistentIdChanged.Fire(data, data2);
-
-			if(oldvessel == FlightGlobals.ActiveVessel)
-			{
-				FlightGlobals.ForceSetActiveVessel(vessel);
-				FlightInputHandler.SetNeutralControls();
-			}
-			else if(vessel == FlightGlobals.ActiveVessel)
-			{
-				vessel.MakeActive();
-				FlightInputHandler.SetNeutralControls();
-			}
-
-			for(int i = 0; i < vessel.parts.Count; i++)
-			{
-				FlightGlobals.PersistentLoadedPartIds.Add(vessel.parts[i].persistentId, vessel.parts[i]);
-				if(vessel.parts[i].protoPartSnapshot == null)
-					continue;
-				FlightGlobals.PersistentUnloadedPartIds.Add(vessel.parts[i].protoPartSnapshot.persistentId, vessel.parts[i].protoPartSnapshot);
-			}
-
-			GameEvents.onVesselWasModified.Fire(vessel);
-			GameEvents.onDockingComplete.Fire(new GameEvents.FromToAction<Part, Part>(part, otherPort.part));
-
-			StartCoroutine(DockingHelper.WaitAndEnableDockingEase(vessel));
-*/
-ahiSofort(position1, position2, position2, tm, tf);
-
-			StartCoroutine(DockingHelper.WaitAndEnableCameraSwitch());
+			DockingHelper.RestoreCameraPosition(part);
 		}
 
 		void DeactivateColliders(Vessel v)
@@ -2063,23 +2008,10 @@ ahiSofort(position1, position2, position2, tm, tf);
 
 		private void DoUndock()
 		{
-Vector3 position1, position2;
-Transform tf; FlightCamera.TargetMode tm;
+			DockingHelper.SaveCameraPosition(part);
+			DockingHelper.SuspendCameraSwitch(10);
 
-			StartCoroutine(ahi(
-				position1 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetPivot().position),
-				position2 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetCameraTransform().position),
-				part.transform.InverseTransformPoint(FlightCamera.fetch.GetCameraTransform().position),
-				tm = FlightCamera.fetch.targetMode, tf = FlightCamera.fetch.Target));
-
-			Part parent = part.parent;
-
-			if(DockStatus == "Attached")
-				part.decouple();
-			else
-				part.Undock(vesselInfo);
-
-ahiSofort(position1, position2, position2, tm, tf);
+			DockingHelper.UndockVessels(this, otherPort);
 
 			otherPort.DeactivateColliders(vessel);
 			DeactivateColliders(otherPort.vessel);
@@ -2110,7 +2042,8 @@ ahiSofort(position1, position2, position2, tm, tf);
 			otherPort.fsm.RunEvent(otherPort.on_undock);
 			fsm.RunEvent(on_undock);
 
-ahiSofort(position1, position2, position2, tm, tf);
+
+			DockingHelper.RestoreCameraPosition(part);
 
 /* -> sowas noch einbauen dann...
  * 
@@ -2160,26 +2093,6 @@ j.xDrive = str;
 			Destroy(j);
 		}
 
-		void ahiSofort(Vector3 position, Vector3 position2, Vector3 position3, FlightCamera.TargetMode m, Transform p)
-		{
-			FlightCamera.fetch.SetTarget(p, true, m);
-
-			FlightCamera.fetch.GetPivot().position = part.transform.TransformPoint(position);
-			FlightCamera.fetch.SetCamCoordsFromPosition(part.transform.TransformPoint(position2));
-			FlightCamera.fetch.GetCameraTransform().position = part.transform.TransformPoint(position3);
-		}
-
-static int waitframes = 1; // FEHLER, nur, damit wir sicher keine Kollisionen haben zum Testen
-
-		IEnumerator ahi(Vector3 position, Vector3 position2, Vector3 position3, FlightCamera.TargetMode m, Transform p)
-		{
-// FEHLER, so lange müsste man nie warten
-			for(int i = 0; i < waitframes; i++)
-				yield return new WaitForEndOfFrame();
-
-			ahiSofort(position, position2, position3, m, p);
-		}
-
 		[KSPEvent(guiActive = true, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 2f, guiName = "#autoLOC_6001445")]
 		public void Undock()
 		{
@@ -2202,17 +2115,12 @@ static int waitframes = 1; // FEHLER, nur, damit wir sicher keine Kollisionen ha
 		{
 			yield return null;
 
-Vector3 position1, position2;
-Transform tf; FlightCamera.TargetMode tm;
-
-position1 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetPivot().position);
-position2 = part.transform.InverseTransformPoint(FlightCamera.fetch.GetCameraTransform().position);
-tm = FlightCamera.fetch.targetMode; tf = FlightCamera.fetch.Target;
+			DockingHelper.SaveCameraPosition(part);
 
 			FlightGlobals.ForceSetActiveVessel(vessel);
 			FlightInputHandler.SetNeutralControls();
 
-ahiSofort(position1, position2, position2, tm, tf);
+			DockingHelper.RestoreCameraPosition(part);
 		}
 
 		[KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "#autoLOC_236028")]
@@ -2328,7 +2236,9 @@ ahiSofort(position1, position2, position2, tm, tf);
 		public void SetDockInfo(DockInfo _dockInfo)
 		{
 			dockInfo = _dockInfo;
-			vesselInfo = (dockInfo.part == (IDockable)this) ? dockInfo.vesselInfo : dockInfo.targetVesselInfo;
+			vesselInfo =
+				(dockInfo == null) ? null :
+				((dockInfo.part == (IDockable)this) ? dockInfo.vesselInfo : dockInfo.targetVesselInfo);
 		}
 
 		////////////////////////////////////////

@@ -41,8 +41,9 @@
     <Reference Include="Assembly-CSharp">
       <HintPath>C:\KerbalSpaceProgram_1.12.3\KSP_x64_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
-    <Reference Include="DockingFunctions">
-      <HintPath>..\..\..\DockingFunctions\DockingFunctions\DockingFunctions\bin\Debug\DockingFunctions.dll</HintPath>
+    <Reference Include="DockingFunctions, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\DockingFunctions\DockingFunctions\DockingFunctions\bin\Release\DockingFunctions.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="UnityEngine">
