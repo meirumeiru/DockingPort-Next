@@ -6,7 +6,7 @@ using System.Text;
 using UnityEngine;
 
 
-namespace DockingPort_Next.Utility
+namespace DockingPortNext.Utility
 {
 	public struct LineDrawer
 	{

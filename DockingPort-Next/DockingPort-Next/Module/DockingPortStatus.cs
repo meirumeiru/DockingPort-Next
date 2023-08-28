@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace DockingPort_Next
+namespace DockingPortNext
 {
 	public class DockingPortStatus : IConfigNode
 	{

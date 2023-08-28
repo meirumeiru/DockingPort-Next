@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using KSP.IO;
 using UnityEngine;
 
-using DockingPort_Next.Utility;
+using DockingPortNext.Utility;
 using DockingFunctions;
 
-namespace DockingPort_Next.Module
+namespace DockingPortNext.Module
 {
 	// FEHLER, Crossfeed noch einrichten... und halt umbauen auf FSM? ... ja, zum Spass... shit ey
 
@@ -388,6 +388,9 @@ namespace DockingPort_Next.Module
 				}
 			}
 
+			Fields["autoFreeDriftMode"].OnValueModified -= onChanged_autoFreeDriftMode;
+			onChanged_autoFreeDriftMode(null);
+
 			StartCoroutine(WaitAndInitialize(st));
 
 			StartCoroutine(WaitAndInitializeDockingNodeFix());
@@ -632,6 +635,8 @@ namespace DockingPort_Next.Module
 			if(RingObject != null)
 				Destroy(RingObject);
 
+			Fields["autoFreeDriftMode"].OnValueModified -= onChanged_autoFreeDriftMode;
+
 			GameEvents.onVesselGoOnRails.Remove(OnPack);
 			GameEvents.onVesselGoOffRails.Remove(OnUnpack);
 
@@ -828,6 +833,8 @@ namespace DockingPort_Next.Module
 				Events["TogglePort"].active = true;
 
 				Events["ExtendRing"].active = true;
+
+				Events["ToggleAutoFreeDriftMode"].active = true;
 			};
 			st_ready.OnFixedUpdate = delegate
 			{
@@ -878,6 +885,8 @@ namespace DockingPort_Next.Module
 
 				Events["RetractRing"].active = false;
 				Events["ExtendRing"].active = true;
+
+				DockDistance = "-";
 			};
 			st_retracting.OnFixedUpdate = delegate
 			{
@@ -913,6 +922,8 @@ DestroyAnchorObject();
 				dockedPartUId = 0;
 
 				Events["RetractRing"].active = true;
+
+				DockDistance = "-";
 
 				_pushStep = 0f;
 			};
@@ -960,6 +971,7 @@ DestroyAnchorObject();
 								dockedPartUId = otherPort.part.flightID;
 
 								fsm.RunEvent(on_approach);
+								otherPort.fsm.RunEvent(otherPort.on_approach_passive);
 								return;
 							}
 						}
@@ -979,7 +991,7 @@ DestroyAnchorObject();
 				otherPort.otherPort = this;
 				otherPort.dockedPartUId = part.flightID;
 
-				otherPort.fsm.RunEvent(otherPort.on_approach_passive);
+//				otherPort.fsm.RunEvent(otherPort.on_approach_passive);
 
 				_pushStep = 0f;
 			};
@@ -1004,17 +1016,12 @@ DestroyAnchorObject();
 						}
 					}
 
+					otherPort.fsm.RunEvent(otherPort.on_distance_passive);
 					fsm.RunEvent(on_distance);
 				}
 			};
 			st_approaching.OnLeave = delegate(KFSMState to)
 			{
-				if((to == st_extended) || (to == st_retracting))
-				{
-					DockDistance = "-";
-
-					otherPort.fsm.RunEvent(otherPort.on_distance_passive);
-				}
 			};
 			fsm.AddState(st_approaching);
 
@@ -1044,7 +1051,11 @@ DestroyAnchorObject();
 				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 
 				if(relevantDistance <= captureDistance)
+				{
 					fsm.RunEvent(on_capture);
+					otherPort.fsm.RunEvent(otherPort.on_capture_passive);
+
+				}
 				else if(relevantDistance > (maxExtensionLength - extensionLength) * 1.4f)
 					fsm.RunEvent(on_restore);
 				else
@@ -1059,10 +1070,6 @@ DestroyAnchorObject();
 			};
 			st_push.OnLeave = delegate(KFSMState to)
 			{
-				if((to == st_restore) || (to == st_retracting))
-				{
-					otherPort.fsm.RunEvent(otherPort.on_distance_passive);
-				}
 			};
 			fsm.AddState(st_push);
 
@@ -1126,7 +1133,18 @@ DestroyAnchorObject();
 				Events["RetractRing"].active = false;
 				Events["Release"].active = true;
 
-				otherPort.fsm.RunEvent(otherPort.on_capture_passive);
+				switch(autoFreeDriftMode)
+				{
+				case 0:
+					break;
+				case 1:
+					part.vessel.ActionGroups.SetGroup(KSPActionGroup.SAS, false);
+					break;
+				case 2:
+					part.vessel.ActionGroups.SetGroup(KSPActionGroup.SAS, false);
+					part.vessel.ActionGroups.SetGroup(KSPActionGroup.RCS, false);
+					break;
+				}
 			};
 			st_captured.OnFixedUpdate = delegate
 			{
@@ -1213,9 +1231,6 @@ DestroyAnchorObject();
 				Events["Release"].active = false;
 				Events["PerformDocking"].active = false;
 				Events["RetractRing"].active = true;
-
-				if(otherPort != null)
-					otherPort.fsm.RunEvent(otherPort.on_release_passive);
 			};
 			st_released.OnFixedUpdate = delegate
 			{
@@ -1328,7 +1343,10 @@ DestroyAnchorObject();
 			st_predocked.OnFixedUpdate = delegate
 			{
 				if(--iPos < 0)
+				{
 					fsm.RunEvent(on_dock);
+					otherPort.fsm.RunEvent(otherPort.on_dock);
+				}
 			};
 			st_predocked.OnLeave = delegate(KFSMState to)
 			{
@@ -1346,14 +1364,14 @@ else
 
 				Destroy(CaptureJoint);
 				CaptureJoint = null;
-
-				otherPort.fsm.RunEvent(otherPort.on_dock);
 			};
 			fsm.AddState(st_predocked);
 		
 			st_docked = new KFSMState("Docked");
 			st_docked.OnEnter = delegate(KFSMState from)
 			{
+				Events["ToggleAutoFreeDriftMode"].active = false;
+
 				Events["Undock"].active = true;
 			};
 			st_docked.OnFixedUpdate = delegate
@@ -1392,6 +1410,8 @@ else
 				Events["TogglePort"].active = true;
 
 				Events["ExtendRing"].active = false;
+
+				Events["ToggleAutoFreeDriftMode"].active = false;
 			};
 			st_disabled.OnFixedUpdate = delegate
 			{
@@ -1860,7 +1880,7 @@ _pushStep = 1f;
 		{
 			if(HighLogic.LoadedSceneIsFlight)
 			{
-				if(!vessel.packed)
+				if(vessel && !vessel.packed)
 				{
 
 				if((fsm != null) && fsm.Started)
@@ -1882,7 +1902,7 @@ _pushStep = 1f;
 		{
 			if(HighLogic.LoadedSceneIsFlight)
 			{
-				if(!vessel.packed)
+				if(vessel && !vessel.packed)
 				{
 
 				if((fsm != null) && fsm.Started)
@@ -1967,12 +1987,18 @@ _pushStep = 1f;
 		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Retract Ring")]
 		public void RetractRing()
 		{
+			if(otherPort != null)
+				otherPort.fsm.RunEvent(otherPort.on_distance_passive);
+
 			fsm.RunEvent(on_retract);
 		}
 
 		[KSPEvent(guiActive = true, guiActiveUnfocused = false, guiName = "Release")]
 		public void Release()
 		{
+			if(otherPort != null)
+				otherPort.fsm.RunEvent(otherPort.on_release_passive);
+
 			fsm.RunEvent(on_release);
 		}
 
@@ -2038,25 +2064,7 @@ _pushStep = 1f;
 				parent.AddForce(nodeTransform.forward * (undockEjectionForce * 0.5f));
 			}
 */
-
-			otherPort.fsm.RunEvent(otherPort.on_undock);
-			fsm.RunEvent(on_undock);
-
-
 			DockingHelper.RestoreCameraPosition(part);
-
-/* -> sowas noch einbauen dann...
- * 
-			if(undockPreAttached)
-			{
-				Decouple();
-				fsm.RunEvent(on_undock);
-				if(otherNode != null)
-					otherNode.OnOtherNodeUndock();
-				undockPreAttached = false;
-				return;
-			}
-*/
 		}
 
 static int froverride = 200;
@@ -2104,6 +2112,9 @@ j.xDrive = str;
 			else
 				otherPort.DoUndock();
 
+			otherPort.fsm.RunEvent(otherPort.on_undock);
+			fsm.RunEvent(on_undock);
+
 			if(oldvessel == FlightGlobals.ActiveVessel)
 			{
 				if(vessel[referenceTransformId] == null)
@@ -2121,6 +2132,35 @@ j.xDrive = str;
 			FlightInputHandler.SetNeutralControls();
 
 			DockingHelper.RestoreCameraPosition(part);
+		}
+
+		[KSPField(isPersistant = true)]
+		public int autoFreeDriftMode = 2;
+
+		private void onChanged_autoFreeDriftMode(object o)
+		{
+			switch(autoFreeDriftMode)
+			{
+			case 0:
+				Events["ToggleAutoFreeDriftMode"].guiName = "Auto Drift Mode: none"; break;
+			case 1:
+				Events["ToggleAutoFreeDriftMode"].guiName = "Auto Drift Mode: disable SAS"; break;
+			case 2:
+				Events["ToggleAutoFreeDriftMode"].guiName = "Auto Drift Mode: disable SAS & RCS"; break;
+			}
+		}
+
+		public int AutoFreeDriftMode
+		{
+			get { return autoFreeDriftMode; }
+			set { if(autoFreeDriftMode == value) return; autoFreeDriftMode = value; onChanged_autoFreeDriftMode(null); }
+		}
+
+		[KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Auto Drift Mode: disable SAS & RCS")]
+		public void ToggleAutoFreeDriftMode()
+		{
+			autoFreeDriftMode = (autoFreeDriftMode + 1) % 3;
+			onChanged_autoFreeDriftMode(null);
 		}
 
 		[KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "#autoLOC_236028")]
