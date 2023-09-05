@@ -2283,15 +2283,12 @@ j.xDrive = str;
 
 		public bool IsDocked()
 		{
-			return dockInfo != null;
+			return ((fsm.CurrentState == st_docked) || (fsm.CurrentState == st_preattached));
 		}
 
 		public IDockable GetOtherDockable()
 		{
-			if(dockInfo == null)
-				return null;
-
-			return dockInfo.part == (IDockable)this ? dockInfo.targetPart : dockInfo.part;
+			return IsDocked() ? (IDockable)otherPort : null;
 		}
 
 		////////////////////////////////////////
