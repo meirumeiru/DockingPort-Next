@@ -2281,6 +2281,19 @@ j.xDrive = str;
 				((dockInfo.part == (IDockable)this) ? dockInfo.vesselInfo : dockInfo.targetVesselInfo);
 		}
 
+		public bool IsDocked()
+		{
+			return dockInfo != null;
+		}
+
+		public IDockable GetOtherDockable()
+		{
+			if(dockInfo == null)
+				return null;
+
+			return dockInfo.part == (IDockable)this ? dockInfo.targetPart : dockInfo.part;
+		}
+
 		////////////////////////////////////////
 		// ITargetable
 
