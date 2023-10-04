@@ -158,6 +158,8 @@ namespace DockingPortNext.Module
 		public KFSMEvent on_enable;
 		public KFSMEvent on_disable;
 
+		public KFSMEvent on_construction;
+
 		// Sounds
 
 // FEHLER, könnte man noch hinzufügen -> siehe LEE oder halt original Node?
@@ -369,6 +371,13 @@ namespace DockingPortNext.Module
 
 			evtSetAsTarget = base.Events["SetAsTarget"];
 			evtUnsetTarget = base.Events["UnsetTarget"];
+
+			GameEvents.onVesselGoOnRails.Add(OnPack);
+			GameEvents.onVesselGoOffRails.Add(OnUnpack);
+
+		//	GameEvents.onFloatingOriginShift.Add(OnFloatingOriginShift);
+
+			GameEvents.OnEVAConstructionModePartDetached.Add(OnEVAConstructionModePartDetached);
 
 			nodeTransform = base.part.FindModelTransform(nodeTransformName);
 			if(!nodeTransform)
@@ -622,14 +631,6 @@ namespace DockingPortNext.Module
 			fsm.StartFSM(DockStatus);
 		}
 
-		public void Start()
-		{
-			GameEvents.onVesselGoOnRails.Add(OnPack);
-			GameEvents.onVesselGoOffRails.Add(OnUnpack);
-
-		//	GameEvents.onFloatingOriginShift.Add(OnFloatingOriginShift);
-		}
-
 		public void OnDestroy()
 		{
 			if(RingObject != null)
@@ -641,6 +642,8 @@ namespace DockingPortNext.Module
 			GameEvents.onVesselGoOffRails.Remove(OnUnpack);
 
 		//	GameEvents.onFloatingOriginShift.Remove(OnFloatingOriginShift);
+
+			GameEvents.OnEVAConstructionModePartDetached.Remove(OnEVAConstructionModePartDetached);
 		}
 
 		private void OnPack(Vessel v)
@@ -736,6 +739,24 @@ namespace DockingPortNext.Module
 				RingObject.transform.position += offset;
 		}
 	*/
+
+		private void OnEVAConstructionModePartDetached(Vessel v, Part p)
+		{
+			if(part == p)
+			{
+				if(otherPort)
+				{
+					otherPort.otherPort = null;
+					otherPort.dockedPartUId = 0;
+					otherPort.fsm.RunEvent(otherPort.on_construction);
+				}
+
+				otherPort = null;
+				dockedPartUId = 0;
+				fsm.RunEvent(on_construction);
+			}
+		}
+
 		////////////////////////////////////////
 		// Functions
 
@@ -1528,6 +1549,12 @@ else
 			on_disable.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
 			on_disable.GoToStateOnEvent = st_disabled;
 			fsm.AddEvent(on_disable, st_ready);
+
+
+			on_construction = new KFSMEvent("Construction");
+			on_construction.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
+			on_construction.GoToStateOnEvent = st_disabled;
+			fsm.AddEvent(on_construction, st_ready, st_extending, st_retracting, st_extended, st_approaching, st_approaching_passive, st_push, st_restore, st_captured, st_captured_passive, st_latched, st_released, st_preparedocking, st_predocked, st_docked, st_preattached);
 		}
 
 // FEHLER, temp, Idee zum ausprobieren -> das nicht nutzen, bevor nicht mehr Test gemacht worden wären -> evtl. joint-restore wie KAS machen oder so
