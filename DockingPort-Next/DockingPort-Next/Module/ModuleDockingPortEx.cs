@@ -1101,23 +1101,15 @@ DestroyAnchorObject();
 			};
 			st_restore.OnFixedUpdate = delegate
 			{
-				float relevantDistance;
+				float relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
 
-				if(otherPort)
-				{
-					relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
-
-					DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
-				}
-				else
-					relevantDistance = 10f;
+				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 
 				if(relevantDistance < (maxExtensionLength - extensionLength))
 					fsm.RunEvent(on_push);
 				else
 				{
-					if(otherPort)
-						CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
+					CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
 
 					_pushStep = Mathf.Max(0f, _pushStep - pushSpeed);
 
@@ -1133,10 +1125,7 @@ DestroyAnchorObject();
 						ActiveJoint.targetRotation = Quaternion.identity;
 						ActiveJoint.targetPosition = extendDirection * (extendPosition - (maxExtensionLength * 0.5f));
 
-						otherPort = null;
-						dockedPartUId = 0;
-
-						fsm.RunEvent(on_extended);
+						fsm.RunEvent(on_approach);
 					}
 				}
 			};
@@ -1255,16 +1244,38 @@ DestroyAnchorObject();
 			};
 			st_released.OnFixedUpdate = delegate
 			{
-				float relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
-
-				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
-
-				if(relevantDistance > (maxExtensionLength - extensionLength) * 1.4f)
+				if(_pushStep > 0f)
 				{
-					otherPort = null;
-					dockedPartUId = 0;
+					CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
 
-					fsm.RunEvent(on_restore);
+					_pushStep = Mathf.Max(0f, _pushStep - pushSpeed);
+
+					if(_pushStep > 0f)
+					{
+						ActiveJoint.targetRotation = Quaternion.Slerp(Quaternion.identity, ActiveJointTargetRotation, _pushStep);
+						ActiveJoint.targetPosition = Vector3.Slerp(extendDirection * (extendPosition - (maxExtensionLength * 0.5f)), ActiveJointTargetPosition, _pushStep);
+					}
+					else
+					{
+						_pushStep = 0f;
+
+						ActiveJoint.targetRotation = Quaternion.identity;
+						ActiveJoint.targetPosition = extendDirection * (extendPosition - (maxExtensionLength * 0.5f));
+					}
+				}
+				else
+				{
+					float relevantDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude - correctionVector.magnitude;
+						
+					DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
+
+					if(relevantDistance > (maxExtensionLength - extensionLength) * 1.4f)
+					{
+						otherPort = null;
+						dockedPartUId = 0;
+
+						fsm.RunEvent(on_extended);
+					}
 				}
 			};
 			st_released.OnLeave = delegate(KFSMState to)
@@ -1456,7 +1467,7 @@ else
 			on_extended = new KFSMEvent("Ring extended");
 			on_extended.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
 			on_extended.GoToStateOnEvent = st_extended;
-			fsm.AddEvent(on_extended, st_extending, st_restore);
+			fsm.AddEvent(on_extended, st_extending, st_released);
 
 			on_retracted = new KFSMEvent("Ring retracted");
 			on_retracted.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
@@ -1467,7 +1478,7 @@ else
 			on_approach = new KFSMEvent("Approaching");
 			on_approach.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
 			on_approach.GoToStateOnEvent = st_approaching;
-			fsm.AddEvent(on_approach, st_extended);
+			fsm.AddEvent(on_approach, st_extended, st_restore);
 
 			on_distance = new KFSMEvent("Distancing");
 			on_distance.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
@@ -1492,7 +1503,7 @@ else
 			on_restore = new KFSMEvent("Restore Ring");
 			on_restore.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
 			on_restore.GoToStateOnEvent = st_restore;
-			fsm.AddEvent(on_restore, st_push, st_released);
+			fsm.AddEvent(on_restore, st_push);
 
 			on_capture = new KFSMEvent("Capture");
 			on_capture.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
