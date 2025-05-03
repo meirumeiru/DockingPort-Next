@@ -10,10 +10,6 @@ using DockingFunctions;
 
 namespace DockingPortNext.Module
 {
-	// FEHLER, Crossfeed noch einrichten... und halt umbauen auf FSM? ... ja, zum Spass... shit ey
-
-	// FEHLER, wir arbeiten bei den Events nie mit "OnCheckCondition" sondern lösen alle manuell aus... kann man sich fragen, ob das gut ist, aber so lange der Event nur von einem Zustand her kommen kann, spielt das wie keine Rolle
-
 	public class ModuleDockingPortEx : PartModule, IDockable, ITargetable
 	{
 		// Settings
@@ -28,13 +24,16 @@ namespace DockingPortNext.Module
 		public string controlTransformName = "";
 
 		[KSPField(isPersistant = false), SerializeField]
+		public Vector3 controlOrientation = Vector3.up; // defines the direction of the control transform (often needed if dockingOrientation is used also)
+
+		[KSPField(isPersistant = false), SerializeField]
 		public string ringName = "";
 
 		[KSPField(isPersistant = false), SerializeField]
 		public Vector3 correctionVector = Vector3.zero; // offset of the "ring center" used in calculations from the real center of the ring-model
 
 		[KSPField(isPersistant = false), SerializeField]
-		public Vector3 dockingOrientation = Vector3.zero; // defines the direction of the docking port (when docked at a 0° angle, these local vectors of two ports point into the same direction)
+		public Vector3 dockingOrientation = Vector3.up; // defines the direction of the docking port (when docked at a 0° angle, these local vectors of two ports point into the same direction)
 
 		[KSPField(isPersistant = false), SerializeField]
 		public int snapCount = 1;
@@ -58,12 +57,23 @@ namespace DockingPortNext.Module
 		public float approachingDistance = 1f;
 
 		[KSPField(isPersistant = false), SerializeField]
+		public float approachingAngle = 15f;
+
+		[KSPField(isPersistant = false), SerializeField]
 		public float captureDistance = 0.005f;
 
-// FEHLER, nodeTypes und so Zeugs noch einbauen -> damit ich nur docken kann mit den passenden Teils und nicht mit allem
 
-		[KSPField(isPersistant = true)]
-		public bool crossfeed = true;
+		[KSPField(isPersistant = false), SerializeField]
+		public string nodeType = "dockingPort";
+
+		public HashSet<string> nodeTypesAccepted = null;
+
+		[KSPField(isPersistant = false)]
+		public int supportedModes = 3; // passive = 1, active = 2, both = 3 // FEHLER, das noch nutzen
+
+		[KSPField(isPersistant = false), SerializeField]
+		public bool autoActivePassive = false;		// FEHLER, das noch nutzen
+
 
 		public struct LookAtInfo
 		{
@@ -86,12 +96,32 @@ namespace DockingPortNext.Module
 
 		public List<LookAt> aLookAt;
 
+		[KSPField(isPersistant = false), SerializeField]
+		public bool canCrossfeed = true;
+
+		[KSPField(isPersistant = true)]
+		public bool crossfeed = true;
+/*
+ * FEHLER, we need a name
+		[KSPField(guiFormat = "S", guiActive = true, guiActiveEditor = true, guiName = "Port Name")]
+		public string TestName = "TestName";
+*/
+
+	// FEHLER, das hier einbauen für captured, latched und docked -> 3 Werte
+
+/*		[KSPField(isPersistant = false)]
+		public float breakingForce = 10f;
+
+		[KSPField(isPersistant = false)]
+		public float breakingTorque = 10f;
+*/
 		// Docking and Status
 
 		public BaseEvent evtSetAsTarget;
 		public BaseEvent evtUnsetTarget;
 
 		public Transform nodeTransform;
+		private GameObject controlTransformHelper;
 		public Transform controlTransform;
 
 		public KerbalFSM fsm;
@@ -112,7 +142,7 @@ namespace DockingPortNext.Module
 		public KFSMState st_captured_passive;
 		
 		public KFSMState st_latched;		// the rings have a stable connection and the system is ready for orienting, pullback and docking
-	//	public KFSMState st_latched_passive; - FEHLER, wird im Moment nicht genutzt
+	//	public KFSMState st_latched_passive;// not used -> passive port remains in st_captured_passive
 
 		public KFSMState st_released;		// after a capture or latch, the rings have been detached again -> maybe for an abort of the docking
 		
@@ -144,7 +174,7 @@ namespace DockingPortNext.Module
 		public KFSMEvent on_capture_passive;
 
 		public KFSMEvent on_latch;
-	//	public KFSMEvent on_latch_passive; - FEHLER, wird im Moment nicht genutzt
+	//	public KFSMEvent on_latch_passive; // not used -> passive port remains in st_captured_passive
 
 		public KFSMEvent on_release;
 		public KFSMEvent on_release_passive;
@@ -162,7 +192,7 @@ namespace DockingPortNext.Module
 
 		// Sounds
 
-// FEHLER, könnte man noch hinzufügen -> siehe LEE oder halt original Node?
+			// option for later
 
 		// Ring
 
@@ -176,10 +206,6 @@ namespace DockingPortNext.Module
 
 		private Vector3 extendDirection;
 		private float extendPosition = 0f;
-
-// FEHLER, nicht nötig als Variable hier... denke ich mal... weil das nur immer temporär existiert
-		private Quaternion ActiveJointTargetRotation;
-		private Vector3 ActiveJointTargetPosition;
 
 		private float _pushStep = 0f;
 
@@ -203,9 +229,9 @@ namespace DockingPortNext.Module
 
 		public ModuleDockingPortEx otherPort;
 		public uint dockedPartUId;
+		public uint dockedType; // defines which side this part is -> 0 = part, 1 = targetPart
 
 		public DockedVesselInfo vesselInfo;
-// FEHLER, ablösen durch DockInfo? mal sehen halt
 
 		private DockingPortStatus _state = null;
 
@@ -231,7 +257,9 @@ namespace DockingPortNext.Module
 
 		public override void OnAwake()
 		{
-			DebugInit();
+#if DEBUG
+	//		DebugInit();
+#endif
 
 			part.dockingPorts.AddUnique(this);
 		}
@@ -239,6 +267,17 @@ namespace DockingPortNext.Module
 		public override void OnLoad(ConfigNode node)
 		{
 			base.OnLoad(node);
+
+			nodeTypesAccepted = new HashSet<string>();
+
+			if(node.HasValue("nodeTypesAccepted"))
+			{
+				string[] values = node.GetValue("nodeTypesAccepted").Split(new char[2] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+				foreach(string s in values)
+					nodeTypesAccepted.Add(s);
+			}
+			else
+				nodeTypesAccepted.Add("dockingPort");
 
 			LoadLookAt(node);
 
@@ -249,6 +288,9 @@ namespace DockingPortNext.Module
 
 			if(node.HasValue("dockUId"))
 				dockedPartUId = uint.Parse(node.GetValue("dockUId"));
+
+			if(node.HasValue("dockedType"))
+				dockedType = uint.Parse(node.GetValue("dockedType"));
 
 			if(node.HasNode("DOCKEDVESSEL"))
 			{
@@ -269,8 +311,6 @@ namespace DockingPortNext.Module
 				node.TryGetValue("otherPortRelativePosition", ref otherPortRelativePosition);
 				node.TryGetValue("otherPortRelativeRotation", ref otherPortRelativeRotation);
 			}
-
-			part.fuelCrossFeed = crossfeed;
 		}
 
 		public DockingPortStatus BuildState()
@@ -359,6 +399,8 @@ namespace DockingPortNext.Module
 
 			node.AddValue("dockUId", dockedPartUId);
 
+			node.AddValue("dockedType", dockedType);
+
 			if(vesselInfo != null)
 				vesselInfo.Save(node.AddNode("DOCKEDVESSEL"));
 
@@ -379,22 +421,39 @@ namespace DockingPortNext.Module
 
 			GameEvents.OnEVAConstructionModePartDetached.Add(OnEVAConstructionModePartDetached);
 
-			nodeTransform = base.part.FindModelTransform(nodeTransformName);
+			nodeTransform = part.FindModelTransform(nodeTransformName);
+// FEHLER, wieso nicht das KSPUtil.FindInPartModel ? hier tue ich das anders, im IR nie... KSP tut's allerdings immer so? -> entscheiden was man will
 			if(!nodeTransform)
 			{
-				Debug.LogWarning("[Docking Node Module]: WARNING - No node transform found with name " + nodeTransformName, base.part.gameObject);
+				Debug.LogWarning("[Docking Node Module]: WARNING - No node transform found with name " + nodeTransformName, part.gameObject);
 				return;
 			}
+
 			if(controlTransformName == string.Empty)
-				controlTransform = base.part.transform;
+				controlTransform = part.transform;
 			else
 			{
-				controlTransform = base.part.FindModelTransform(controlTransformName);
+				controlTransform = part.FindModelTransform(controlTransformName);
 				if(!controlTransform)
 				{
-					Debug.LogWarning("[Docking Node Module]: WARNING - No control transform found with name " + controlTransformName, base.part.gameObject);
-					controlTransform = base.part.transform;
+					Debug.LogWarning("[Docking Node Module]: WARNING - No control transform found with name " + controlTransformName, part.gameObject);
+					controlTransform = part.transform;
 				}
+			}
+
+			if(controlOrientation != Vector3.up)
+			{
+				controlTransformHelper = new GameObject();
+				controlTransformHelper.transform.parent = controlTransform.transform;
+
+				controlTransformHelper.transform.localPosition = Vector3.zero;
+				controlTransformHelper.transform.localRotation = Quaternion.identity;
+
+				controlTransformHelper.transform.rotation = Quaternion.AngleAxis(Vector3.SignedAngle(controlOrientation, Vector3.up, Vector3.forward), nodeTransform.rotation * Vector3.forward) * controlTransformHelper.transform.rotation;
+
+				controlTransformHelper.SetActive(true); // FEHLER, nötig?
+
+				controlTransform = controlTransformHelper.transform;
 			}
 
 			Fields["autoFreeDriftMode"].OnValueModified -= onChanged_autoFreeDriftMode;
@@ -402,21 +461,7 @@ namespace DockingPortNext.Module
 
 			StartCoroutine(WaitAndInitialize(st));
 
-			StartCoroutine(WaitAndInitializeDockingNodeFix());
-		}
-
-		// FEHLER, ist 'n Quickfix, solange der blöde Port noch drüber hängt im Part...
-		public IEnumerator WaitAndInitializeDockingNodeFix()
-		{
-			ModuleDockingNode DockingNode = part.FindModuleImplementing<ModuleDockingNode>();
-
-			if(DockingNode)
-			{
-				while((DockingNode.fsm == null) || (!DockingNode.fsm.Started))
-					yield return null;
-
-				DockingNode.fsm.RunEvent(DockingNode.on_disable);
-			}
+	//		StartCoroutine(WaitAndDisableDockingNode());
 		}
 
 		public IEnumerator WaitAndInitialize(StartState st)
@@ -436,6 +481,10 @@ namespace DockingPortNext.Module
 
 			Events["Undock"].active = false;
 
+			if(!canCrossfeed) crossfeed = false;
+
+			part.fuelCrossFeed = crossfeed;
+
 			Events["EnableXFeed"].active = !crossfeed;
 			Events["DisableXFeed"].active = crossfeed;
 
@@ -451,7 +500,7 @@ namespace DockingPortNext.Module
 				while(otherPort.Ring == null)
 					yield return null;
 
-		// FEHLER, logo, das könnte auch er laden... aber... na ja...
+				// other port will load this too -> we set this just in case something does not work
 				otherPort.otherPort = this;
 				otherPort.dockedPartUId = part.flightID;
 			}
@@ -588,7 +637,7 @@ namespace DockingPortNext.Module
 
 			if(DockStatus == "Docked")
 			{
-				if(Vessel.GetDominantVessel(vessel, otherPort.vessel) == vessel)
+				if(dockedType == 0)
 					DockingHelper.OnLoad(this, vesselInfo, otherPort, otherPort.vesselInfo);
 			}
 
@@ -602,11 +651,11 @@ namespace DockingPortNext.Module
 					AttachNode node = part.FindAttachNode(referenceAttachNode);
 					if((node != null) && node.attachedPart)
 					{
-						ModuleDockingPortEx DockingNodeEx_ = node.attachedPart.GetComponent<ModuleDockingPortEx>();
+						ModuleDockingPortEx _otherPort = node.attachedPart.GetComponent<ModuleDockingPortEx>();
 
-						if(DockingNodeEx_)
+						if(_otherPort)
 						{
-							otherPort = DockingNodeEx_;
+							otherPort = _otherPort;
 							dockedPartUId = otherPort.part.flightID;
 
 							DockStatus = "Attached";
@@ -630,9 +679,25 @@ namespace DockingPortNext.Module
 
 			fsm.StartFSM(DockStatus);
 		}
+	/*
+		public IEnumerator WaitAndDisableDockingNode()
+		{
+			ModuleDockingNode DockingNode = part.FindModuleImplementing<ModuleDockingNode>();
 
+			if(DockingNode)
+			{
+				while((DockingNode.fsm == null) || (!DockingNode.fsm.Started))
+					yield return null;
+
+				DockingNode.fsm.RunEvent(DockingNode.on_disable);
+			}
+		}
+	*/
 		public void OnDestroy()
 		{
+			if(controlTransformHelper != null)
+				Destroy(controlTransformHelper);
+
 			if(RingObject != null)
 				Destroy(RingObject);
 
@@ -834,6 +899,7 @@ namespace DockingPortNext.Module
 				return;
 
 			Ring = KSPUtil.FindInPartModel(transform, ringName);
+// FEHLER, wieso nicht auch FindModelTransforms ??
 
 			originalRingParent = Ring.parent;
 			originalRingLocalPosition = Ring.localPosition;
@@ -969,26 +1035,31 @@ DestroyAnchorObject();
 						|| (partModule.part.State == PartStates.DEAD))
 							continue;
 
-						ModuleDockingPortEx DockingNodeEx_ = partModule.GetComponent<ModuleDockingPortEx>();
+						ModuleDockingPortEx _otherPort = partModule.GetComponent<ModuleDockingPortEx>();
 
-						if(DockingNodeEx_ == null)
+						if(_otherPort == null)
 							continue;
 
-						if(DockingNodeEx_.fsm.CurrentState != DockingNodeEx_.st_ready)
+						if(!nodeTypesAccepted.Contains(_otherPort.nodeType)
+						|| !_otherPort.nodeTypesAccepted.Contains(nodeType))
 							continue;
 
-						distance = DockingNodeEx_.Ring.transform.position - RingObject.transform.position;
+// FEHLER, autoActivePassive noch berücksichtigen hier
+						if(_otherPort.fsm.CurrentState != _otherPort.st_ready)
+							continue;
+
+						distance = _otherPort.Ring.transform.position - RingObject.transform.position;
 
 						if(distance.magnitude < detectionDistance)
 						{
-							angle = Vector3.Angle(nodeTransform.forward, -DockingNodeEx_.nodeTransform.forward);
+							angle = Vector3.Angle(nodeTransform.forward, -_otherPort.nodeTransform.forward);
 
-							if((angle <= 15f) && (distance.magnitude <= approachingDistance))
+							if((angle <= approachingAngle) && (distance.magnitude <= approachingDistance))
 							{
 								// we don't expect to see multiple matching ports in the same area
 								// that's why we don't continue to search and simply take the first we find
 
-								otherPort = DockingNodeEx_;
+								otherPort = _otherPort;
 								dockedPartUId = otherPort.part.flightID;
 
 								fsm.RunEvent(on_approach);
@@ -1012,7 +1083,7 @@ DestroyAnchorObject();
 				otherPort.otherPort = this;
 				otherPort.dockedPartUId = part.flightID;
 
-//				otherPort.fsm.RunEvent(otherPort.on_approach_passive);
+			//	otherPort.fsm.RunEvent(otherPort.on_approach_passive); -> is done manually
 
 				_pushStep = 0f;
 			};
@@ -1030,7 +1101,7 @@ DestroyAnchorObject();
 					{
 						float angle = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 
-						if(angle <= 15f)
+						if(angle <= approachingAngle)
 						{
 							DockDistance = distance.magnitude.ToString("N2");
 							return;
@@ -1081,6 +1152,8 @@ DestroyAnchorObject();
 					fsm.RunEvent(on_restore);
 				else
 				{
+					Quaternion ActiveJointTargetRotation; Vector3 ActiveJointTargetPosition;
+
 					CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
 
 					_pushStep = Mathf.Min(1.0f, _pushStep + pushSpeed);
@@ -1109,6 +1182,8 @@ DestroyAnchorObject();
 					fsm.RunEvent(on_push);
 				else
 				{
+					Quaternion ActiveJointTargetRotation; Vector3 ActiveJointTargetPosition;
+
 					CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
 
 					_pushStep = Mathf.Max(0f, _pushStep - pushSpeed);
@@ -1246,6 +1321,8 @@ DestroyAnchorObject();
 			{
 				if(_pushStep > 0f)
 				{
+					Quaternion ActiveJointTargetRotation; Vector3 ActiveJointTargetPosition;
+
 					CalculateActiveJointRotationAndPosition(otherPort, out ActiveJointTargetRotation, out ActiveJointTargetPosition);
 
 					_pushStep = Mathf.Max(0f, _pushStep - pushSpeed);
@@ -1851,9 +1928,34 @@ iCapturePosition = -100;
 			DockDistance = "-";
 		}
 
+static bool use2 = true;
 		private void BuildCaptureJoint2()
 		{
 			CalculateCaptureJointRotationAndPosition(otherPort, out CaptureJointTargetRotation, out CaptureJointTargetPosition);
+
+// FEHLER, neue Idee -> das später überall nutzen... vorerst mal zum Test im LEE, weil der die offensichtlichsten Abweichungen zeigte
+// FEHLER, ModuleDockingPortEx war etwas anders gelöst als im LEE und so... da wir jetzt neu aber das hier nutzen wollen und das richtig(er) sein könnte, kann's sein, dass das eine gute Idee ist, das einfach zu probieren...
+			Vector3 _pos; Quaternion _rot;
+			DockingHelper.CalculateDockingPositionAndRotation(this, otherPort, out _pos, out _rot);
+
+			if(use2)
+			{
+Vector3 corp = otherPort.GetPart().transform.position
+	- (otherPort.GetPart().vessel.transform.position + otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgPos);
+
+_pos += corp;
+
+Quaternion corq =
+	Quaternion.Inverse(otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgRot)
+	* otherPort.GetPart().transform.rotation;
+
+_rot *= corq;
+
+			// beides "umdrehen", weil es in einen Joint gefüttert wird...
+
+				CaptureJointTargetPosition = -transform.InverseTransformPoint(_pos);
+				CaptureJointTargetRotation = Quaternion.Inverse(Quaternion.Inverse(transform.rotation) * _rot);
+			}
 
 			_rotStep = 1f;
 			_transStep = 1f;
@@ -1887,9 +1989,7 @@ if(n1)
 			ActiveJoint.targetPosition = ActiveJoint.transform.InverseTransformPoint(RingObject.transform.position + RingObject.transform.rotation * ActiveJoint.connectedAnchor) - ActiveJoint.anchor;
 			ActiveJoint.targetRotation = Quaternion.Inverse(ActiveJoint.transform.rotation) * RingObject.transform.rotation;
 
-ActiveJointTargetPosition = ActiveJoint.targetPosition;
-ActiveJointTargetRotation = ActiveJoint.targetRotation;
-_pushStep = 1f;
+			_pushStep = 1f;
 }
 
 			// Joint
@@ -1903,6 +2003,7 @@ _pushStep = 1f;
 			{
 				aLookAt[i].part.LookAt(aLookAt[i].target);
 				aLookAt[i].part.rotation *= Quaternion.LookRotation(aLookAt[i].direction);
+
 // FEHLER, noch stretch machen, wenn nötig
 
 				if(aLookAt[i].stretch)
@@ -1920,19 +2021,9 @@ _pushStep = 1f;
 			{
 				if(vessel && !vessel.packed)
 				{
-
-				if((fsm != null) && fsm.Started)
-					fsm.FixedUpdateFSM();
-
+					if((fsm != null) && fsm.Started)
+						fsm.FixedUpdateFSM();
 				}
-/*
-				if(vessel.packed && followOtherPort)
-				{
-					vessel.SetRotation(otherPort.part.transform.rotation * otherPortRelativeRotation, true);
-					vessel.SetPosition(otherPort.part.transform.position + otherPort.part.transform.rotation * otherPortRelativePosition, false);
-				//	vessel.IgnoreGForces(5);
-				}
-*/
 			}
 		}
 
@@ -1942,29 +2033,27 @@ _pushStep = 1f;
 			{
 				if(vessel && !vessel.packed)
 				{
+					if((fsm != null) && fsm.Started)
+					{
+						fsm.UpdateFSM();
+						DockStatus = fsm.currentStateName;
+					}
 
-				if((fsm != null) && fsm.Started)
-				{
-					fsm.UpdateFSM();
-					DockStatus = fsm.currentStateName;
-				}
+					if(FlightGlobals.fetch.VesselTarget == (ITargetable)this)
+					{
+						evtSetAsTarget.active = false;
+						evtUnsetTarget.active = true;
 
-				if(FlightGlobals.fetch.VesselTarget == (ITargetable)this)
-				{
-					evtSetAsTarget.active = false;
-					evtUnsetTarget.active = true;
-
-					if(FlightGlobals.ActiveVessel == vessel)
-						FlightGlobals.fetch.SetVesselTarget(null);
-					else if((FlightGlobals.ActiveVessel.transform.position - nodeTransform.position).sqrMagnitude > 40000f)
-						FlightGlobals.fetch.SetVesselTarget(vessel);
-				}
-				else
-				{
-					evtSetAsTarget.active = true;
-					evtUnsetTarget.active = false;
-				}
-			
+						if(FlightGlobals.ActiveVessel == vessel)
+							FlightGlobals.fetch.SetVesselTarget(null);
+						else if((FlightGlobals.ActiveVessel.transform.position - nodeTransform.position).sqrMagnitude > 40000f)
+							FlightGlobals.fetch.SetVesselTarget(vessel);
+					}
+					else
+					{
+						evtSetAsTarget.active = true;
+						evtUnsetTarget.active = false;
+					}
 				}
 			}
 		}
@@ -1975,10 +2064,8 @@ _pushStep = 1f;
 			{
 				if(vessel && !vessel.packed)
 				{
-
-				if((fsm != null) && fsm.Started)
-					fsm.LateUpdateFSM();
-
+					if((fsm != null) && fsm.Started)
+						fsm.LateUpdateFSM();
 				}
 
 				if(RingObject)
@@ -2145,10 +2232,10 @@ j.xDrive = str;
 			Vessel oldvessel = vessel;
 			uint referenceTransformId = vessel.referenceTransformId;
 
-			if(part.parent == otherPort.part)
+	//		if(part.parent == otherPort.part) -> FEHLER, unnötig, DockingFunctions behandeln den Fall schon
 				DoUndock();
-			else
-				otherPort.DoUndock();
+	//		else
+	//			otherPort.DoUndock();
 
 			otherPort.fsm.RunEvent(otherPort.on_undock);
 			fsm.RunEvent(on_undock);
@@ -2209,7 +2296,7 @@ j.xDrive = str;
 			bool fuelCrossFeed = part.fuelCrossFeed;
 			part.fuelCrossFeed = (crossfeed = true);
 			if(fuelCrossFeed != crossfeed)
-				GameEvents.onPartCrossfeedStateChange.Fire(base.part);
+				GameEvents.onPartCrossfeedStateChange.Fire(part);
 		}
 
 		[KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "#autoLOC_236030")]
@@ -2217,10 +2304,10 @@ j.xDrive = str;
 		{
 			Events["EnableXFeed"].active = true;
 			Events["DisableXFeed"].active = false;
-			bool fuelCrossFeed = base.part.fuelCrossFeed;
-			base.part.fuelCrossFeed = (crossfeed = false);
+			bool fuelCrossFeed = part.fuelCrossFeed;
+			part.fuelCrossFeed = (crossfeed = false);
 			if(fuelCrossFeed != crossfeed)
-				GameEvents.onPartCrossfeedStateChange.Fire(base.part);
+				GameEvents.onPartCrossfeedStateChange.Fire(part);
 		}
 
 		////////////////////////////////////////
@@ -2304,6 +2391,7 @@ j.xDrive = str;
 
 		public Vector3 GetDockingOrientation()
 		{ return dockingOrientation; }
+//		{ return Vector3.up; } // FEHLER, neue Idee
 
 		public int GetSnapCount()
 		{ return snapCount; }
@@ -2314,9 +2402,22 @@ j.xDrive = str;
 		public void SetDockInfo(DockInfo _dockInfo)
 		{
 			dockInfo = _dockInfo;
-			vesselInfo =
-				(dockInfo == null) ? null :
-				((dockInfo.part == (IDockable)this) ? dockInfo.vesselInfo : dockInfo.targetVesselInfo);
+
+			if(dockInfo == null)
+			{
+				dockedType = 0;
+				vesselInfo = null;
+			}
+			else if(dockInfo.part == (IDockable)this)
+			{
+				dockedType = 0;
+				vesselInfo = dockInfo.vesselInfo;
+			}
+			else
+			{
+				dockedType = 1;
+				vesselInfo = dockInfo.targetVesselInfo;
+			}
 		}
 
 		public bool IsDocked()
@@ -2359,7 +2460,7 @@ j.xDrive = str;
 
 		public string GetName()
 		{
-			return "name fehlt noch"; // FEHLER, einbauen
+			return "name fehlt noch"; // FEHLER, einbauen -> siehe weiter oben -> und angeben, ob man den Vessel-Name als Präfix will oder nicht
 		}
 
 		public string GetDisplayName()
@@ -2390,24 +2491,14 @@ j.xDrive = str;
 		////////////////////////////////////////
 		// Debug
 
+#if DEBUG
+/*
 		private MultiLineDrawer ld;
-
-		private String[] astrDebug;
-		private int istrDebugPos;
 
 		private void DebugInit()
 		{
 			ld = new MultiLineDrawer();
 			ld.Create(null);
-
-			astrDebug = new String[10240];
-			istrDebugPos = 0;
-		}
-
-		private void DebugString(String s)
-		{
-			astrDebug[istrDebugPos] = s;
-			istrDebugPos = (istrDebugPos + 1) % 10240;
 		}
 
 		private void DrawPointer(int idx, Vector3 p_vector)
@@ -2428,5 +2519,8 @@ j.xDrive = str;
 
 		private void DrawAxis(int idx, Transform p_transform, Vector3 p_vector, bool p_relative)
 		{ DrawAxis(idx, p_transform, p_vector, p_relative, Vector3.zero); }
+*/
+#endif
+
 	}
 }

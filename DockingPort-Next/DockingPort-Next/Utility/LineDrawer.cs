@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using UnityEngine;
 
-using UnityEngine;
-
+#if DEBUG
 
 namespace DockingPortNext.Utility
 {
@@ -113,3 +109,5 @@ namespace DockingPortNext.Utility
 		}
 	}
 }
+
+#endif
