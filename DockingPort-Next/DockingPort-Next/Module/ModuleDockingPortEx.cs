@@ -5,7 +5,10 @@ using System.Collections.Generic;
 using KSP.IO;
 using UnityEngine;
 
+#if DEBUG
 using DockingPortNext.Utility;
+#endif
+
 using DockingFunctions;
 
 namespace DockingPortNext.Module
@@ -21,22 +24,23 @@ namespace DockingPortNext.Module
 		public string referenceAttachNode = ""; // if something is connected to this node, then the state is "Attached" (or "Pre-Attached" -> connected in the VAB/SPH)
 
 		[KSPField(isPersistant = false), SerializeField]
+		public Vector3 dockingOrientation = Vector3.up; // defines the direction of the docking port (when docked at a 0° angle, these local vectors of two ports point into the same direction)
+
+		[KSPField(isPersistant = false), SerializeField]
+		public int snapCount = 1;
+
+		[KSPField(isPersistant = false), SerializeField]
 		public string controlTransformName = "";
 
 		[KSPField(isPersistant = false), SerializeField]
 		public Vector3 controlOrientation = Vector3.up; // defines the direction of the control transform (often needed if dockingOrientation is used also)
+
 
 		[KSPField(isPersistant = false), SerializeField]
 		public string ringName = "";
 
 		[KSPField(isPersistant = false), SerializeField]
 		public Vector3 correctionVector = Vector3.zero; // offset of the "ring center" used in calculations from the real center of the ring-model
-
-		[KSPField(isPersistant = false), SerializeField]
-		public Vector3 dockingOrientation = Vector3.up; // defines the direction of the docking port (when docked at a 0° angle, these local vectors of two ports point into the same direction)
-
-		[KSPField(isPersistant = false), SerializeField]
-		public int snapCount = 1;
 
 		[KSPField(isPersistant = false), SerializeField]
 		public float extensionLength = 0.18f; // extension (while searching other port)
@@ -50,6 +54,7 @@ namespace DockingPortNext.Module
 		[KSPField(isPersistant = false), SerializeField]
 		public float pushSpeed = 0.01f;
 
+
 		[KSPField(isPersistant = false), SerializeField]
 		public float detectionDistance = 5f;
 
@@ -62,17 +67,51 @@ namespace DockingPortNext.Module
 		[KSPField(isPersistant = false), SerializeField]
 		public float captureDistance = 0.005f;
 
+		[KSPField(isPersistant = false), SerializeField]
+		public float captureAngle = 5f;
+
 
 		[KSPField(isPersistant = false), SerializeField]
 		public string nodeType = "dockingPort";
 
-		public HashSet<string> nodeTypesAccepted = null;
+		[KSPField(isPersistant = false), SerializeField]
+		private string nodeTypesAccepted = "dockingPort";
 
-		[KSPField(isPersistant = false)]
-		public int supportedModes = 3; // passive = 1, active = 2, both = 3 // FEHLER, das noch nutzen
+		public HashSet<string> nodeTypesAcceptedS = null;
 
 		[KSPField(isPersistant = false), SerializeField]
-		public bool autoActivePassive = false;		// FEHLER, das noch nutzen
+		public int supportedModes = 3; // passive = 1, active = 2, both = 3
+// FEHLER, das noch nutzen
+
+		[KSPField(isPersistant = false), SerializeField]
+		public bool autoActivePassive = false;
+// FEHLER, das noch nutzen
+
+
+	// FEHLER, das hier einbauen für captured, latched und docked -> 3 Werte
+
+/*		[KSPField(isPersistant = false)]
+		public float breakingForce = 100f;
+
+		[KSPField(isPersistant = false)]
+		public float breakingTorque = 100f;
+
+		[KSPField(isPersistant = false), SerializeField]
+		public float latchingSpeedRotation = 0.1f; // degrees per second
+
+		[KSPField(isPersistant = false), SerializeField]
+		public float latchingSpeedTranslation = 0.025f; // distance per second
+*/
+
+		[KSPField(isPersistant = false), SerializeField]
+		public bool canCrossfeed = true;
+
+		[KSPField(isPersistant = true)]
+		public bool crossfeed = true;
+
+
+		[KSPField(guiFormat = "S", guiActive = true, guiActiveEditor = true, guiName = "Port Name")]
+		public string portName = "";
 
 
 		public struct LookAtInfo
@@ -96,25 +135,6 @@ namespace DockingPortNext.Module
 
 		public List<LookAt> aLookAt;
 
-		[KSPField(isPersistant = false), SerializeField]
-		public bool canCrossfeed = true;
-
-		[KSPField(isPersistant = true)]
-		public bool crossfeed = true;
-/*
- * FEHLER, we need a name
-		[KSPField(guiFormat = "S", guiActive = true, guiActiveEditor = true, guiName = "Port Name")]
-		public string TestName = "TestName";
-*/
-
-	// FEHLER, das hier einbauen für captured, latched und docked -> 3 Werte
-
-/*		[KSPField(isPersistant = false)]
-		public float breakingForce = 10f;
-
-		[KSPField(isPersistant = false)]
-		public float breakingTorque = 10f;
-*/
 		// Docking and Status
 
 		public BaseEvent evtSetAsTarget;
@@ -209,29 +229,30 @@ namespace DockingPortNext.Module
 
 		private float _pushStep = 0f;
 
-		private ConfigurableJoint CaptureJoint;
-
 		private Vector3 originalRingObjectLocalPosition;
 		private Quaternion originalRingObjectLocalRotation;
-
-		private Quaternion CaptureJointTargetRotation;
-		private Vector3 CaptureJointTargetPosition;
 
 		private float lastPreLatchDistance;
 
 		private int iCapturePosition;
-		private int iPos = 0;
 
-		private float _rotStep = 0f;
-		private float _transStep = 0f;	// FEHLER, ablösen den Müll hier
-
-		// Docking
+		// Capturing / Docking
 
 		public ModuleDockingPortEx otherPort;
 		public uint dockedPartUId;
 		public uint dockedType; // defines which side this part is -> 0 = part, 1 = targetPart
 
 		public DockedVesselInfo vesselInfo;
+
+		private ConfigurableJoint LatchJoint;
+
+		private Quaternion LatchJointTargetRotation;
+		private Vector3 LatchJointTargetPosition;
+
+		private float _rotStep = 0f;
+		private float _transStep = 0f;	// FEHLER, ablösen den Müll hier
+
+		private int relaxCounter = 0;
 
 		private DockingPortStatus _state = null;
 
@@ -267,17 +288,6 @@ namespace DockingPortNext.Module
 		public override void OnLoad(ConfigNode node)
 		{
 			base.OnLoad(node);
-
-			nodeTypesAccepted = new HashSet<string>();
-
-			if(node.HasValue("nodeTypesAccepted"))
-			{
-				string[] values = node.GetValue("nodeTypesAccepted").Split(new char[2] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-				foreach(string s in values)
-					nodeTypesAccepted.Add(s);
-			}
-			else
-				nodeTypesAccepted.Add("dockingPort");
 
 			LoadLookAt(node);
 
@@ -411,13 +421,25 @@ namespace DockingPortNext.Module
 		{
 			base.OnStart(st);
 
+			nodeTypesAcceptedS = new HashSet<string>();
+
+			string[] values = nodeTypesAccepted.Split(new char[2] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			foreach(string s in values)
+				nodeTypesAcceptedS.Add(s);
+
+			if(portName == string.Empty)
+				portName = part.partInfo.title;
+
+//			if(state == StartState.Editor)
+//				return;
+// FEHLER, nicht gleich abbrechen -> aber siehe SolarPanel -> man müsste den Ring schon extenden können auch im Editor
+// FEHLER, aber trotzdem nicht alles tun!! das hier ist viel zu viel!
+
 			evtSetAsTarget = base.Events["SetAsTarget"];
 			evtUnsetTarget = base.Events["UnsetTarget"];
 
 			GameEvents.onVesselGoOnRails.Add(OnPack);
 			GameEvents.onVesselGoOffRails.Add(OnUnpack);
-
-		//	GameEvents.onFloatingOriginShift.Add(OnFloatingOriginShift);
 
 			GameEvents.OnEVAConstructionModePartDetached.Add(OnEVAConstructionModePartDetached);
 
@@ -549,8 +571,8 @@ namespace DockingPortNext.Module
 				_pushStep = _state._pushStep;
 
 		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
-				BuildCaptureJoint(otherPort);
-				BuildCaptureJoint2();
+				BuildLatchJoint(otherPort);
+				CalculateLatchJointTarget();
 
 				// Pack
 
@@ -587,8 +609,8 @@ namespace DockingPortNext.Module
 		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
 
 // FEHLER FEHLER -> das hier geht schief, wenn der rb vom otherPort noch nicht existiert... das sollte er zwar, aber... bei GF's z.B., die keine physik-Objekte sind, kommt das erst später, daher... ist das doof... müsste man evtl. warten auf .started vom Part?
-				BuildCaptureJoint(otherPort);
-				BuildCaptureJoint2();
+				BuildLatchJoint(otherPort);
+				CalculateLatchJointTarget();
 
 				RingObject.transform.localPosition =
 						_capturePositionB;
@@ -610,8 +632,8 @@ namespace DockingPortNext.Module
 					maximumForce = f
 				};
 
-				CaptureJoint.angularXDrive = CaptureJoint.angularYZDrive = CaptureJoint.slerpDrive = drive;
-				CaptureJoint.xDrive = CaptureJoint.yDrive = CaptureJoint.zDrive = drive;
+				LatchJoint.angularXDrive = LatchJoint.angularYZDrive = LatchJoint.slerpDrive = drive;
+				LatchJoint.xDrive = LatchJoint.yDrive = LatchJoint.zDrive = drive;
 
 				// Pack
 
@@ -1040,8 +1062,8 @@ DestroyAnchorObject();
 						if(_otherPort == null)
 							continue;
 
-						if(!nodeTypesAccepted.Contains(_otherPort.nodeType)
-						|| !_otherPort.nodeTypesAccepted.Contains(nodeType))
+						if(!nodeTypesAcceptedS.Contains(_otherPort.nodeType)
+						|| !_otherPort.nodeTypesAcceptedS.Contains(nodeType))
 							continue;
 
 // FEHLER, autoActivePassive noch berücksichtigen hier
@@ -1142,6 +1164,7 @@ DestroyAnchorObject();
 
 				DockDistance = (otherPort.Ring.transform.position - RingObject.transform.position).magnitude.ToString("N2");
 
+// FEHLER, 's gibt noch 'n captureAngle... warum ist uns der egal hier???
 				if(relevantDistance <= captureDistance)
 				{
 					fsm.RunEvent(on_capture);
@@ -1212,11 +1235,16 @@ DestroyAnchorObject();
 			st_captured = new KFSMState("Captured");
 			st_captured.OnEnter = delegate(KFSMState from)
 			{
-				BuildCaptureJoint(otherPort);
-				BuildCaptureJoint2();
-
 				Events["RetractRing"].active = false;
 				Events["Release"].active = true;
+
+				BuildLatchJoint(otherPort);
+				CalculateLatchJointTarget();
+
+				_rotStep = 1f;
+				_transStep = 1f;
+
+				lastPreLatchDistance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
 
 				switch(autoFreeDriftMode)
 				{
@@ -1246,11 +1274,11 @@ DestroyAnchorObject();
 					return;
 				}
 
-				if(--iPos > 0)
+				if(--relaxCounter > 0)
 					return;
 
 				++iCapturePosition;
-				iPos = 8;
+				relaxCounter = 8;
 
 				{
 					float f, d;
@@ -1263,7 +1291,7 @@ DestroyAnchorObject();
 						float preLatchDistance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
 
 						if(Mathf.Abs(preLatchDistance - lastPreLatchDistance) < 0.001f)
-							iPos = 1;
+							relaxCounter = 1;
 						else
 							lastPreLatchDistance = (2f * lastPreLatchDistance + preLatchDistance) / 3f;
 					}
@@ -1280,8 +1308,8 @@ DestroyAnchorObject();
 						maximumForce = f
 					};
 
-					CaptureJoint.angularXDrive = CaptureJoint.angularYZDrive = CaptureJoint.slerpDrive = drive;
-					CaptureJoint.xDrive = CaptureJoint.yDrive = CaptureJoint.zDrive = drive;
+					LatchJoint.angularXDrive = LatchJoint.angularYZDrive = LatchJoint.slerpDrive = drive;
+					LatchJoint.xDrive = LatchJoint.yDrive = LatchJoint.zDrive = drive;
 
 					if(iCapturePosition >= 25)
 					{
@@ -1291,6 +1319,8 @@ DestroyAnchorObject();
 			};
 			st_captured.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_latched)
+					Events["Release"].active = false;
 			};
 			fsm.AddState(st_captured);
 
@@ -1311,7 +1341,7 @@ DestroyAnchorObject();
 			st_released = new KFSMState("Capture released");
 			st_released.OnEnter = delegate(KFSMState from)
 			{
-				DestroyCaptureJoint();
+				DestroyLatchJoint();
 
 				Events["Release"].active = false;
 				Events["PerformDocking"].active = false;
@@ -1371,6 +1401,8 @@ DestroyAnchorObject();
 			};
 			st_latched.OnLeave = delegate(KFSMState to)
 			{
+				Events["Release"].active = false;
+
 				Events["PerformDocking"].active = false;
 			};
 			fsm.AddState(st_latched);
@@ -1382,8 +1414,6 @@ DestroyAnchorObject();
 				ActiveJoint = null;
 DestroyAnchorObject();
 
-				Events["Release"].active = false;
-				Events["PerformDocking"].active = false;
 				// OPTION: abort docking?
 			};
 			st_preparedocking.OnFixedUpdate = delegate
@@ -1399,44 +1429,44 @@ DestroyAnchorObject();
 					DockStatus = "docking (orientation)";
 // FEHLER, das wird überschrieben... mal sehen ob wir noch was tun hier oder ob wir's halt lassen die Info
 
-					_rotStep -= 1f / (Quaternion.Angle(Quaternion.identity, CaptureJointTargetRotation) / 0.008f);
+					_rotStep -= 1f / (Quaternion.Angle(Quaternion.identity, LatchJointTargetRotation) / 0.008f);
 					if(_rotStep < 0) _rotStep = 0f;
 
-					CaptureJoint.targetRotation = Quaternion.Slerp(CaptureJointTargetRotation, Quaternion.identity, _rotStep);
+					LatchJoint.targetRotation = Quaternion.Slerp(LatchJointTargetRotation, Quaternion.identity, _rotStep);
 
 					// Abstand von meiner Achse bestimmen
 					Vector3 diff = otherPort.nodeTransform.position - nodeTransform.position;
 					Vector3 diffp = Vector3.ProjectOnPlane(diff, nodeTransform.forward);
 
 					Vector3 diffpl = /*CaptureJoint.transform.rotation **/ (Quaternion.Inverse(nodeTransform.rotation) * diffp);
-					diffpl = Quaternion.Inverse(CaptureJoint.transform.rotation) * diffp;
+					diffpl = Quaternion.Inverse(LatchJoint.transform.rotation) * diffp;
 
 					if(diffpl.magnitude < 0.0005f)
 					{
-						CaptureJoint.targetPosition -= diffpl;
+						LatchJoint.targetPosition -= diffpl;
 						_transStep = 0f;
 					}
 					else
-						CaptureJoint.targetPosition -= diffpl.normalized * 0.0005f;
+						LatchJoint.targetPosition -= diffpl.normalized * 0.0005f;
 				}
 				else
 				{
 					DockStatus = "docking (retracting)";
 // FEHLER, das wird überschrieben... mal sehen ob wir noch was tun hier oder ob wir's halt lassen die Info
 
-					CaptureJoint.targetRotation = CaptureJointTargetRotation;
+					LatchJoint.targetRotation = LatchJointTargetRotation;
 
 					Vector3 diff = otherPort.nodeTransform.position - nodeTransform.position;
-					diff = CaptureJoint.transform.InverseTransformDirection(diff);
+					diff = LatchJoint.transform.InverseTransformDirection(diff);
 
 					if(diff.magnitude < 0.0005f)
 					{
-						CaptureJoint.targetPosition -= diff;
+						LatchJoint.targetPosition -= diff;
 
 						fsm.RunEvent(on_predock);
 					}
 					else
-						CaptureJoint.targetPosition -= diff.normalized * 0.0005f;
+						LatchJoint.targetPosition -= diff.normalized * 0.0005f;
 				}
 			};
 			st_preparedocking.OnLeave = delegate(KFSMState to)
@@ -1447,11 +1477,11 @@ DestroyAnchorObject();
 			st_predocked = new KFSMState("Docking");
 			st_predocked.OnEnter = delegate(KFSMState from)
 			{
-				iPos = 10;
+				relaxCounter = 10;
 			};
 			st_predocked.OnFixedUpdate = delegate
 			{
-				if(--iPos < 0)
+				if(--relaxCounter < 0)
 				{
 					fsm.RunEvent(on_dock);
 					otherPort.fsm.RunEvent(otherPort.on_dock);
@@ -1471,8 +1501,8 @@ if(vessel.GetTotalMass() < otherPort.vessel.GetTotalMass()) // FEHLER, ich prüf
 else
 				otherPort.DockToVessel(this); // FEHLER, nie geprüft ob's ginge
 
-				Destroy(CaptureJoint);
-				CaptureJoint = null;
+				Destroy(LatchJoint);
+				LatchJoint = null;
 			};
 			fsm.AddState(st_predocked);
 		
@@ -1750,37 +1780,6 @@ dann wär's "gleicher"... und die followport sache muss ich ja auch tun...
 			position = transform.InverseTransformDirection(diff) - ActiveJoint.anchor;
 		}
 
-		// calculate position and orientation for st_capture
-		void CalculateCaptureJointRotationAndPosition(ModuleDockingPortEx port, out Quaternion rotation, out Vector3 position)
-		{
-			Vector3 tvref =
-				transform.InverseTransformDirection(nodeTransform.TransformDirection(dockingOrientation));
-
-			Vector3 portDockingOrientation = port.nodeTransform.TransformDirection(port.dockingOrientation);
-			Vector3 tv = transform.InverseTransformDirection(portDockingOrientation);
-
-			for(int i = 1; i < snapCount; i++)
-			{
-				float ff = (360f / snapCount) * i;
-
-				Vector3 tv2 = transform.InverseTransformDirection(Quaternion.AngleAxis(ff, port.nodeTransform.forward) * portDockingOrientation);
-
-				if(Vector3.Angle(tv, tvref) > Vector3.Angle(tv2, tvref))
-					tv = tv2;
-			}
-
-			Quaternion qt = Quaternion.LookRotation(transform.InverseTransformDirection(nodeTransform.forward), transform.InverseTransformDirection(nodeTransform.TransformDirection(dockingOrientation)));
-			Quaternion qc = Quaternion.LookRotation(transform.InverseTransformDirection(-port.nodeTransform.forward), tv);
-
-			rotation = qt * Quaternion.Inverse(qc);
-
-
-			Vector3 diff = port.nodeTransform.position - nodeTransform.position;
-			Vector3 difflp = Vector3.ProjectOnPlane(diff, transform.forward);
-
-			position = -transform.InverseTransformDirection(difflp);
-		}
-
 		void ConfigureActiveJoint(ConfigurableJoint joint)
 		{
 			joint.xMotion = joint.yMotion = joint.zMotion = ConfigurableJointMotion.Limited;
@@ -1881,7 +1880,7 @@ _captureRotationB =
 				targetLocalRotation;
 		}
 
-		private void BuildCaptureJoint(ModuleDockingPortEx port)
+		private void BuildLatchJoint(ModuleDockingPortEx port)
 		{
 		// FEHLER, müsste doch schon gesetzt sein... auch beim Dock... aber gut...
 			otherPort = port;
@@ -1918,7 +1917,7 @@ _captureRotationB =
 			joint.angularXDrive = joint.angularYZDrive = joint.slerpDrive = drive;
 			joint.xDrive = joint.yDrive = joint.zDrive = drive;
 
-			CaptureJoint = joint;
+			LatchJoint = joint;
 
 // FEHLER, die Modelle sind oft so ein elender Schrott... unglaublich du... -> geht's so???
 joint.anchor = joint.transform.InverseTransformPoint(nodeTransform.position);
@@ -1928,44 +1927,28 @@ iCapturePosition = -100;
 			DockDistance = "-";
 		}
 
-static bool use2 = true;
-		private void BuildCaptureJoint2()
+		private void CalculateLatchJointTarget()
 		{
-			CalculateCaptureJointRotationAndPosition(otherPort, out CaptureJointTargetRotation, out CaptureJointTargetPosition);
+			Vector3 targetPosition; Quaternion targetRotation;
+			DockingHelper.CalculateDockingPositionAndRotation(this, otherPort, out targetPosition, out targetRotation);
 
-// FEHLER, neue Idee -> das später überall nutzen... vorerst mal zum Test im LEE, weil der die offensichtlichsten Abweichungen zeigte
-// FEHLER, ModuleDockingPortEx war etwas anders gelöst als im LEE und so... da wir jetzt neu aber das hier nutzen wollen und das richtig(er) sein könnte, kann's sein, dass das eine gute Idee ist, das einfach zu probieren...
-			Vector3 _pos; Quaternion _rot;
-			DockingHelper.CalculateDockingPositionAndRotation(this, otherPort, out _pos, out _rot);
+			// convert values from org-values to real values (for latching we need real values, for docking org-values)
+			targetPosition +=
+				otherPort.GetPart().transform.position
+				- (otherPort.GetPart().vessel.transform.position + otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgPos);
 
-			if(use2)
-			{
-Vector3 corp = otherPort.GetPart().transform.position
-	- (otherPort.GetPart().vessel.transform.position + otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgPos);
+			targetRotation *=
+				Quaternion.Inverse(otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgRot)
+				* otherPort.GetPart().transform.rotation;
 
-_pos += corp;
-
-Quaternion corq =
-	Quaternion.Inverse(otherPort.GetPart().vessel.transform.rotation * otherPort.GetPart().orgRot)
-	* otherPort.GetPart().transform.rotation;
-
-_rot *= corq;
-
-			// beides "umdrehen", weil es in einen Joint gefüttert wird...
-
-				CaptureJointTargetPosition = -transform.InverseTransformPoint(_pos);
-				CaptureJointTargetRotation = Quaternion.Inverse(Quaternion.Inverse(transform.rotation) * _rot);
-			}
-
-			_rotStep = 1f;
-			_transStep = 1f;
-
-			lastPreLatchDistance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
+			// invert both values
+			LatchJointTargetPosition = -transform.InverseTransformPoint(targetPosition);
+			LatchJointTargetRotation = Quaternion.Inverse(Quaternion.Inverse(transform.rotation) * targetRotation);
 		}
 
 static bool n1 = true;
 
-		private void DestroyCaptureJoint()
+		private void DestroyLatchJoint()
 		{
 			// RingObject
 			RingObject.transform.localPosition = originalRingObjectLocalPosition;
@@ -1993,8 +1976,8 @@ if(n1)
 }
 
 			// Joint
-			Destroy(CaptureJoint);
-			CaptureJoint = null;
+			Destroy(LatchJoint);
+			LatchJoint = null;
 		}
 
 		private void UpdatePistons()
@@ -2151,12 +2134,14 @@ if(n1)
 			DockingHelper.RestoreCameraPosition(part);
 		}
 
+// FEHLER, komisch -> das nochmal ansehen und evtl. auch im IR-ConnectionSystem wieder reinbringen
+/* FEHLER, ich glaube, das brauchen wir nicht... völliger Mist das
 		void DeactivateColliders(Vessel v)
 		{
 			Collider[] colliders = part.transform.GetComponentsInChildren<Collider>(true);
 			CollisionManager.SetCollidersOnVessel(v, true, colliders);
 		}
-
+*/
 		private void DoUndock()
 		{
 			DockingHelper.SaveCameraPosition(part);
@@ -2164,8 +2149,8 @@ if(n1)
 
 			DockingHelper.UndockVessels(this, otherPort);
 
-			otherPort.DeactivateColliders(vessel);
-			DeactivateColliders(otherPort.vessel);
+//			otherPort.DeactivateColliders(vessel);
+//			DeactivateColliders(otherPort.vessel);
 
 			ConfigurableJoint j = part.gameObject.AddComponent<ConfigurableJoint>();
 			j.connectedBody = otherPort.part.rb;
@@ -2391,7 +2376,6 @@ j.xDrive = str;
 
 		public Vector3 GetDockingOrientation()
 		{ return dockingOrientation; }
-//		{ return Vector3.up; } // FEHLER, neue Idee
 
 		public int GetSnapCount()
 		{ return snapCount; }
@@ -2418,6 +2402,29 @@ j.xDrive = str;
 				dockedType = 1;
 				vesselInfo = dockInfo.targetVesselInfo;
 			}
+		}
+
+		// returns true, if the port is (passive and) ready to dock with an other (active) port
+		public bool IsReadyFor(IDockable otherPort)
+		{
+			if(otherPort != null)
+			{
+				ModuleDockingPortEx _otherPort = otherPort.GetPart().GetComponent<ModuleDockingPortEx>();
+
+				if(!_otherPort)
+					return false;
+
+				if(!nodeTypesAcceptedS.Contains(_otherPort.nodeType)
+				|| !_otherPort.nodeTypesAcceptedS.Contains(nodeType))
+					return false;
+			}
+
+			return (fsm.CurrentState != st_ready);
+		}
+
+		public ITargetable GetTargetable()
+		{
+			return (ITargetable)this;
 		}
 
 		public bool IsDocked()
@@ -2460,7 +2467,7 @@ j.xDrive = str;
 
 		public string GetName()
 		{
-			return "name fehlt noch"; // FEHLER, einbauen -> siehe weiter oben -> und angeben, ob man den Vessel-Name als Präfix will oder nicht
+			return portName;
 		}
 
 		public string GetDisplayName()
@@ -2486,6 +2493,27 @@ j.xDrive = str;
 		public bool GetActiveTargetable()
 		{
 			return false;
+		}
+
+		private DockingPortRenameDialog renameDialog;
+
+		[KSPEvent(guiActive = true, guiActiveUnfocused = true, guiName = "Rename Port")]
+		public void Rename()
+		{
+			InputLockManager.SetControlLock("dockingPortRenameDialog");
+
+			renameDialog = DockingPortRenameDialog.Spawn(portName, onPortRenameAccept, onPortRenameCancel);
+		}
+
+		private void onPortRenameAccept(string newPortName)
+		{
+			portName = newPortName;
+			onPortRenameCancel();
+		}
+
+		private void onPortRenameCancel()
+		{
+			InputLockManager.RemoveControlLock("dockingPortRenameDialog");
 		}
 
 		////////////////////////////////////////
