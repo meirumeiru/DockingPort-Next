@@ -571,7 +571,7 @@ namespace DockingPortNext.Module
 				_pushStep = _state._pushStep;
 
 		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
-				BuildLatchJoint(otherPort);
+				BuildLatchJoint();
 				CalculateLatchJointTarget();
 
 				// Pack
@@ -609,7 +609,7 @@ namespace DockingPortNext.Module
 		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
 
 // FEHLER FEHLER -> das hier geht schief, wenn der rb vom otherPort noch nicht existiert... das sollte er zwar, aber... bei GF's z.B., die keine physik-Objekte sind, kommt das erst später, daher... ist das doof... müsste man evtl. warten auf .started vom Part?
-				BuildLatchJoint(otherPort);
+				BuildLatchJoint();
 				CalculateLatchJointTarget();
 
 				RingObject.transform.localPosition =
@@ -664,10 +664,8 @@ namespace DockingPortNext.Module
 			}
 
 			if((DockStatus == "Ready")
-			|| ((DockStatus == "Attached") && (otherPort == null))) // fix damaged state (just in case)
+			|| ((DockStatus == "Attached") && (otherPort == null)))
 			{
-				// fix state if attached to other port
-
 				if(referenceAttachNode != string.Empty)
 				{
 					AttachNode node = part.FindAttachNode(referenceAttachNode);
@@ -681,6 +679,7 @@ namespace DockingPortNext.Module
 							dockedPartUId = otherPort.part.flightID;
 
 							DockStatus = "Attached";
+							otherPort.DockStatus = "Attached";
 						}
 					}
 				}
@@ -1238,7 +1237,7 @@ DestroyAnchorObject();
 				Events["RetractRing"].active = false;
 				Events["Release"].active = true;
 
-				BuildLatchJoint(otherPort);
+				BuildLatchJoint();
 				CalculateLatchJointTarget();
 
 				_rotStep = 1f;
@@ -1880,20 +1879,13 @@ _captureRotationB =
 				targetLocalRotation;
 		}
 
-		private void BuildLatchJoint(ModuleDockingPortEx port)
+		private void BuildLatchJoint()
 		{
-		// FEHLER, müsste doch schon gesetzt sein... auch beim Dock... aber gut...
-			otherPort = port;
-			dockedPartUId = otherPort.part.flightID;
-
-			otherPort.otherPort = this;
-			otherPort.dockedPartUId = part.flightID;
-
 			// ActiveJoint
 			DisableActiveJoint(ActiveJoint);
 
 			// Ring
-			SetCapturedRingPosition(port);
+			SetCapturedRingPosition(otherPort);
 
 			_captureSlerp = 0f;
 
@@ -2404,22 +2396,34 @@ j.xDrive = str;
 			}
 		}
 
+		// returns true, if the port is compatible with the other port
+		public bool IsCompatible(IDockable otherPort)
+		{
+			if(otherPort == null)
+				return false;
+
+			ModuleDockingPortEx _otherPort = otherPort.GetPart().GetComponent<ModuleDockingPortEx>();
+
+			if(!_otherPort)
+				return false;
+
+			if(!nodeTypesAcceptedS.Contains(_otherPort.nodeType)
+			|| !_otherPort.nodeTypesAcceptedS.Contains(nodeType))
+				return false;
+
+			return true;
+		}
+
 		// returns true, if the port is (passive and) ready to dock with an other (active) port
 		public bool IsReadyFor(IDockable otherPort)
 		{
 			if(otherPort != null)
 			{
-				ModuleDockingPortEx _otherPort = otherPort.GetPart().GetComponent<ModuleDockingPortEx>();
-
-				if(!_otherPort)
-					return false;
-
-				if(!nodeTypesAcceptedS.Contains(_otherPort.nodeType)
-				|| !_otherPort.nodeTypesAcceptedS.Contains(nodeType))
+				if(!IsCompatible(otherPort))
 					return false;
 			}
 
-			return (fsm.CurrentState != st_ready);
+			return (fsm.CurrentState == st_ready);
 		}
 
 		public ITargetable GetTargetable()

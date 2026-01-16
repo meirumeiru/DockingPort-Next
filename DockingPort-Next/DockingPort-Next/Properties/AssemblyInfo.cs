@@ -36,4 +36,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("1.0.6.0")]
 
 
-[assembly: KSPAssemblyDependency("DockingFunctions", 1, 0)]
+[assembly: KSPAssemblyDependency("DockingFunctions", 1, 1)]
+
+[assembly: KSPAssembly("DockingPortEx", 1, 0)]
