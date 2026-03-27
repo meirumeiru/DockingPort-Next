@@ -1984,7 +1984,7 @@ _captureRotationB =
 			joint.linearLimit = linearJointLimit;
 			joint.linearLimitSpring = linearJointLimitSpring;
 
-			JointDrive angularDrive = new JointDrive { maximumForce = capturingForce, positionSpring = 60000f, positionDamper = 0.002f };
+			JointDrive angularDrive = new JointDrive { maximumForce = 100f /*capturingForce*/, positionSpring = 100f /*60000f*/, positionDamper = 0.002f };
 			joint.angularXDrive = joint.angularYZDrive = angularDrive; 
 /*
  * FEHLER, das hier war das alte -> neu ist capturingForce höher (1000f) und positionSpring fix 60000f bzw. PhysicsGlobals.JointForce ...
@@ -1998,7 +1998,9 @@ _captureRotationB =
 					maximumForce = 100f
 				};
 */
-			JointDrive linearDrive = new JointDrive { maximumForce = capturingForce, positionSpring = PhysicsGlobals.JointForce, positionDamper = 0.002f };
+// FEHLER FEHLER, das mit den 100 ist zwar toll, aber evtl. sollte man's nicht so machen, sondern per config? weiss halt nicht...
+
+			JointDrive linearDrive = new JointDrive { maximumForce = 100f /*capturingForce*/, positionSpring = 100f /*PhysicsGlobals.JointForce*/, positionDamper = 0.002f };
 			joint.xDrive = joint.yDrive = joint.zDrive = linearDrive;
 
 			joint.breakForce = float.MaxValue;
@@ -2313,17 +2315,13 @@ if(n1)
 			otherPort.otherPort = this;
 			otherPort.dockedPartUId = part.flightID;
 
-			DockingHelper.SaveCameraPosition(part);
 			DockingHelper.SuspendCameraSwitch(10);
 
 			DockingHelper.DockVessels(this, otherPort);
-
-			DockingHelper.RestoreCameraPosition(part);
 		}
 
 		private void DoUndock()
 		{
-			DockingHelper.SaveCameraPosition(part);
 			DockingHelper.SuspendCameraSwitch(10);
 
 			DockingHelper.UndockVessels(this, otherPort);
@@ -2350,7 +2348,6 @@ if(n1)
 				parent.AddForce(nodeTransform.forward * (undockEjectionForce * 0.5f));
 			}
 */
-			DockingHelper.RestoreCameraPosition(part);
 		}
 
 static int froverride = 200;
@@ -2409,12 +2406,8 @@ j.xDrive = str;
 		{
 			yield return null;
 
-			DockingHelper.SaveCameraPosition(part);
-
 			FlightGlobals.ForceSetActiveVessel(vessel);
 			FlightInputHandler.SetNeutralControls();
-
-			DockingHelper.RestoreCameraPosition(part);
 		}
 
 		[KSPField(isPersistant = true)]
