@@ -264,10 +264,6 @@ namespace DockingPortNext.Module
 
 		private float _pushStep = 0f;
 
-// FEHLER, die Werte hier sind die "pre-Capture Ring-Objekt Positionen" -> also da wo der Ring war, relativ zu meinem Port, bevor wir ihn an den anderen Port gehängt haben, weil der Joint (Capture) gebaut wurde
-		private Vector3 originalRingObjectLocalPosition;		// FEHLER, ist das nicht gleich der ringOrgLocalPosition? hmm... warum nicht? und sonst -> umbennen um ins Schema zu passen
-		private Quaternion originalRingObjectLocalRotation;
-
 		private float lastPreLatchDistance;
 
 		private int iCapturePosition;
@@ -372,71 +368,19 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 			}
 		}
 
-// FEHLER, weil wir neue Werte eingefügt haben, müsste man die Funktion hier wohl überarbeiten... Mann oh...
 		public DockingPortStatus BuildState()
 		{
 			DockingPortStatus state = new DockingPortStatus();
 
-			if((DockStatus == "Extending ring")
-			|| (DockStatus == "Retracting ring")
-			|| (DockStatus == "Searching")
-			|| (DockStatus == "Approaching")
-			|| (DockStatus == "Push ring")
-			|| (DockStatus == "Restore ring")
-			|| (DockStatus == "Capture released"))
+			state.extendPosition = extendPosition;
+
+			if(ringJoint)
 			{
-				state.ringPosition = part.transform.InverseTransformPoint(ringObject.transform.position);
-				state.ringRotation = Quaternion.Inverse(part.transform.rotation) * ringObject.transform.rotation;
-
-				state.extendPosition = extendPosition;
-
 				state.activeJointTargetPosition = ringJoint.targetPosition;
 				state.activeJointTargetRotation = ringJoint.targetRotation;
-
-				state._pushStep = _pushStep;
 			}
 
-			if((DockStatus == "Captured")
-			|| (DockStatus == "Latched")
-			|| (DockStatus == "Retracting ring"))
-			{
-				state.ringPosition = ringObject.transform.localPosition;
-				state.ringRotation = ringObject.transform.localRotation;
-
-				state.extendPosition = extendPosition;
-
-				state.activeJointTargetPosition = ringJoint.targetPosition;
-				state.activeJointTargetRotation = ringJoint.targetRotation;
-
-				state.originalRingObjectLocalPosition = originalRingObjectLocalPosition;
-				state.originalRingObjectLocalRotation = originalRingObjectLocalRotation;
-			}
-
-// FEHLER, bei dem bin ich nicht ganz sicher -> beim Retracting auch nicht
-
-			if(DockStatus == "Docking")
-			{
-				state.ringPosition = ringObject.transform.localPosition;
-				state.ringRotation = ringObject.transform.localRotation;
-
-				state.extendPosition = extendPosition;
-
-				state.originalRingObjectLocalPosition = originalRingObjectLocalPosition;
-				state.originalRingObjectLocalRotation = originalRingObjectLocalRotation;
-			}
-
-			if(DockStatus == "Docked")
-			{
-// FEHLER, das hier noch machen... das wird oft vorkommen und sollte schon stimmen dann... also echt jetzt
-			}
-
-// FEHLER FEHLER hier noch weiter machen dann... -> aktuell tun wir's immer
-	//			state.captureJointTargetPosition = CaptureJoint.targetPosition;
-	//			state.captureJointTargetRotation = CaptureJointTargetRotation;
-					// FEHLER, das ist doch sinnlos hier
-
-	//		state._rotStep = _rotStep;
-	//		state._transStep = _transStep;
+			state._pushStep = _pushStep;
 
 			return state;
 		}
@@ -545,6 +489,8 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 
 			Events["Undock"].active = false;
 
+			ResetDockInfo();
+
 			if(!canCrossfeed) crossfeed = false;
 
 			part.fuelCrossFeed = crossfeed;
@@ -569,126 +515,7 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 				otherPort.dockedPartUId = part.flightID;
 			}
 
-			if((DockStatus == "Extending ring")
-			|| (DockStatus == "Retracting ring")
-			|| (DockStatus == "Searching")
-			|| (DockStatus == "Approaching")
-			|| (DockStatus == "Push ring")
-			|| (DockStatus == "Restore ring"))
-			{
-				BuildRingObject();
-				ringJoint = BuildRingJoint();
-
-				ringObject.transform.position = part.transform.TransformPoint(_state.ringPosition);
-				ringObject.transform.rotation = part.transform.rotation * _state.ringRotation;
-
-				extendPosition = _state.extendPosition;
-
-				ringJoint.targetPosition = _state.activeJointTargetPosition;
-				ringJoint.targetRotation = _state.activeJointTargetRotation;
-
-				_pushStep = _state._pushStep;
-
-				// Pack
-
-				ringObject.GetComponent<Rigidbody>().isKinematic = true;
-				ringObject.GetComponent<Rigidbody>().detectCollisions = false;
-
-				ringObject.transform.parent = transform;
-			}
-
-			if(DockStatus == "Captured")
-			{
-				BuildRingObject();
-				ringJoint = BuildRingJoint();
-
-				ringObject.transform.position = otherPort.transform.TransformPoint(_state.originalRingObjectLocalPosition);
-				ringObject.transform.rotation = otherPort.transform.rotation * _state.originalRingObjectLocalRotation;
-
-				extendPosition = _state.extendPosition;
-
-				ringJoint.targetPosition = _state.activeJointTargetPosition;
-				ringJoint.targetRotation = _state.activeJointTargetRotation;
-
-				_pushStep = _state._pushStep;
-
-		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
-				BuildJoint();
-				CalculateJointTarget();
-
-				// Pack
-
-				ringRelativePosition = ringObject.transform.localPosition;
-				ringRelativeRotation = ringObject.transform.localRotation;
-
-				ringObject.transform.parent = transform;
-			}
-
-			if((DockStatus == "Latched")
-			|| (DockStatus == "Retracting ring"))
-			{
-				BuildRingObject();
-				ringJoint = BuildRingJoint();
-
-				ringObject.transform.position = otherPort.transform.TransformPoint(_state.originalRingObjectLocalPosition);
-				ringObject.transform.rotation = otherPort.transform.rotation * _state.originalRingObjectLocalRotation;
-
-				extendPosition = _state.extendPosition;
-
-				ringJoint.targetPosition = _state.activeJointTargetPosition;
-				ringJoint.targetRotation = _state.activeJointTargetRotation;
-
-				_pushStep = _state._pushStep;
-
-		// FEHLER, hier machen wir wieder einen super schwachen Joint und fangen neu an mit dem Latching... das ist so gewollt (im Moment zumindest)
-
-// FEHLER FEHLER -> das hier geht schief, wenn der rb vom otherPort noch nicht existiert... das sollte er zwar, aber... bei GF's z.B., die keine physik-Objekte sind, kommt das erst später, daher... ist das doof... müsste man evtl. warten auf .started vom Part?
-				BuildJoint();
-				CalculateJointTarget();
-
-				ringObject.transform.localPosition =
-						_capturePositionB;
-
-				ringObject.transform.localRotation =
-						_captureRotationB;
-
-				iCapturePosition = 25;
-
-				float f, d;
-
-				f = 10000f * iCapturePosition;
-				d = 0.001f;
-
-				JointDrive drive = new JointDrive
-				{
-					positionSpring = f,
-					positionDamper = d,
-					maximumForce = f
-				};
-
-				joint.angularXDrive = joint.angularYZDrive = joint.slerpDrive = drive;
-				joint.xDrive = joint.yDrive = joint.zDrive = drive;
-
-				// Pack
-
-				ringRelativePosition = ringObject.transform.localPosition;
-				ringRelativeRotation = ringObject.transform.localRotation;
-
-				ringObject.transform.parent = transform;
-			}
-
-// FEHLER, fehlt noch total
-			if(DockStatus == "Docking")
-			{
-			}
-
-			if(DockStatus == "Docked")
-			{
-				if(dockedType == 0)
-					DockingHelper.OnLoad(this, vesselInfo, otherPort, otherPort.vesselInfo);
-			}
-
-			if((DockStatus == "Ready")
+			if((DockStatus == "Inactive")
 			|| ((DockStatus == "Attached") && (otherPort == null)))
 			{
 				if(referenceAttachNode != string.Empty)
@@ -712,9 +539,88 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 
 			SetupFSM();
 
+			if(DockStatus == "Retracting ring")
+				DockStatus = "Ready";
+
+			if((DockStatus == "Push ring")
+			|| (DockStatus == "Restore ring"))
+				DockStatus = "Approaching";
+
+			if(DockStatus == "Capture released")
+				DockStatus = "Searching";
+
+			if(DockStatus == "Docking")
+				DockStatus = "Retracting ring";
+
+			if((DockStatus == "Extending ring")
+			|| (DockStatus == "Searching")
+			|| (DockStatus == "Approaching")
+			|| (DockStatus == "Captured")
+			|| (DockStatus == "Latched")
+			|| (DockStatus == "Retracting ring"))
+			{
+				BuildRingObject();
+				ringJoint = BuildRingJoint();
+
+				extendPosition = _state.extendPosition;
+
+				ringJoint.targetPosition = _state.activeJointTargetPosition;
+				ringJoint.targetRotation = _state.activeJointTargetRotation;
+
+				_pushStep = _state._pushStep;
+
+				// Pack
+
+				ringObject.GetComponent<Rigidbody>().isKinematic = true;
+				ringObject.GetComponent<Rigidbody>().detectCollisions = false;
+
+				ringObject.transform.parent = transform;
+			}
+
+			if((DockStatus == "Captured")
+			|| (DockStatus == "Latched")
+			|| (DockStatus == "Retracting ring"))
+			{
+				BuildJoint();
+				CalculateJointTarget();
+
+				relaxCounter = 8;
+			}
+
+			if((DockStatus == "Latched")
+			|| (DockStatus == "Retracting ring"))
+			{
+				ringObject.transform.localPosition = _capturePositionB;
+				ringObject.transform.localRotation = _captureRotationB;
+
+				iCapturePosition = 25;
+
+				float f, d;
+
+				f = 10000f * iCapturePosition;
+				d = 0.001f;
+
+				JointDrive drive = new JointDrive
+				{
+					positionSpring = f,
+					positionDamper = d,
+					maximumForce = f
+				};
+
+				joint.angularXDrive = joint.angularYZDrive = joint.slerpDrive = drive;
+				joint.xDrive = joint.yDrive = joint.zDrive = drive;
+			}
+
+			if(DockStatus == "Docked")
+			{
+				if(dockedType == 0)
+					DockingHelper.OnLoad(this, vesselInfo, otherPort, otherPort.vesselInfo);
+			}
+
 			if((DockStatus == "Approaching")
 			|| (DockStatus == "Captured")
-			|| (DockStatus == "Capture released"))
+			|| (DockStatus == "Latched")
+			|| (DockStatus == "Retracting ring"))
 			{
 				if(otherPort != null)
 				{
@@ -874,12 +780,6 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 
 			ringTransform = part.FindModelTransform(ringName);
 
-// FEHLER, wieso nicht auch FindModelTransforms ??
-if(ringTransform != KSPUtil.FindInPartModel(transform, ringName))
-{
-	Logger.Log("geht doch nicht mit FindModelTransform!!!", Logger.Level.Error); // FEHLER, ich such was
-}
-
 			ringTransformOrgParent = ringTransform.parent;
 			ringOrgLocalPosition = ringTransform.localPosition;
 			ringOrgLocalRotation = ringTransform.localRotation;
@@ -937,12 +837,6 @@ if(ringTransform != KSPUtil.FindInPartModel(transform, ringName))
 							l.part = part.FindModelTransform(info.partName);
 							l.target = part.FindModelTransform(info.targetName);
 
-// FEHLER, gleiche Frage hier
-if(l.part != KSPUtil.FindInPartModel(part.transform, info.partName))
-	Logger.Log("FindModelTransform (1) doch nicht gut??", Logger.Level.Error);
-if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
-	Logger.Log("FindModelTransform (2) doch nicht gut??", Logger.Level.Error);
-
 							l.direction = info.direction;
 							l.stretch = info.stretch;
 							if(l.stretch)
@@ -984,24 +878,22 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_ready.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_disabled)
+					Events["TogglePort"].active = false;
+
+				Events["ExtendRing"].active = false;
 			};
 			fsm.AddState(st_ready);
 
 			st_extending = new KFSMState("Extending ring");
 			st_extending.OnEnter = delegate(KFSMState from)
 			{
-				if(from != st_ready)
-					return;
-
-				Events["TogglePort"].active = false;
-
 				if(ringObject == null)
 					BuildRingObject();
 
 				if(ringJoint == null)
 					ringJoint = BuildRingJoint();
 
-				Events["ExtendRing"].active = false;
 				Events["RetractRing"].active = true;
 
 				DockStatus = st_extending.name;
@@ -1019,6 +911,8 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_extending.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_extended)
+					Events["RetractRing"].active = false;
 			};
 			fsm.AddState(st_extending);
 
@@ -1028,11 +922,9 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 				otherPort = null;
 				dockedPartUId = 0;
 
-				Events["RetractRing"].active = false;
 				Events["ExtendRing"].active = true;
 
 				DockStatus = st_retracting.name;
-				DockDistance = "-";
 			};
 			st_retracting.OnFixedUpdate = delegate
 			{
@@ -1047,6 +939,9 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_retracting.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_extending)
+					Events["ExtendRing"].active = false;
+
 				if(to != st_ready)
 					return;
 
@@ -1071,11 +966,10 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 				_pushStep = 0f;
 
 				DockStatus = st_extended.name;
-				DockDistance = "-";
 			};
 			st_extended.OnFixedUpdate = delegate
 			{
-				float distance; float alignment;
+				float relevantDistance; float alignment;
 
 				for(int i = 0; i < FlightGlobals.VesselsLoaded.Count; i++)
 				{
@@ -1106,15 +1000,15 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 						if(_otherPort.fsm.CurrentState != _otherPort.st_ready)
 							continue;
 
-						distance = (_otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude;
+						relevantDistance = (_otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude;
 
-						if(distance < detectionDistance)
+						if(relevantDistance < detectionDistance)
 						{
-							DockDistance = distance.ToString();
+							DockDistance = relevantDistance.ToString();
 
 							alignment = Vector3.Angle(nodeTransform.forward, -_otherPort.nodeTransform.forward);
 
-							if((alignment <= approachingAlignment) && (distance <= approachingDistance))
+							if((alignment <= approachingAlignment) && (relevantDistance <= approachingDistance))
 							{
 								DockAlignment = alignment.ToString();
 								DockAngle = "-";
@@ -1133,12 +1027,15 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 					}
 				}
 
-				DockDistance = "-";
-				DockAlignment = "-";
-				DockAngle = "-";
+				ResetDockInfo();
 			};
 			st_extended.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_approaching)
+					Events["RetractRing"].active = false;
+
+				if(to != st_approaching)
+					ResetDockInfo();
 			};
 			fsm.AddState(st_extended);
 
@@ -1159,34 +1056,24 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			st_approaching.OnFixedUpdate = delegate
 			{
 				float relevantDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude - correctionVector.magnitude;
+					// FEHLER, relevantAlignment? relevantAngle?
 
-// FEHLER, ->correctionVector auf Ring drauf rechnen in seinem space... also wirklich du...
-/*
-				float distance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
+			//	float distance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
 				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 				float angle = CalculateAngle();
 
-				DockDistance = distance.ToString();
+				DockDistance = relevantDistance.ToString();
 				DockAlignment = alignment.ToString();
 				DockAngle = angle.ToString();
-*/
+
 				if(relevantDistance < (maxExtensionLength - extensionLength))
 					fsm.RunEvent(on_push);
 				else
 				{
-// FEHLER, erst hier drin die distance rechnen??
-
-					Vector3 distance = otherPort.ringTransform.transform.position - ringObject.transform.position;
-
-					if(distance.magnitude < 1.5f * approachingDistance)
+					if(relevantDistance < 1.5f * approachingDistance)
 					{
-						float angle = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
-
-						if(angle <= approachingAlignment)
-						{
-							DockDistance = distance.magnitude.ToString("N2");
+						if(alignment <= approachingAlignment)
 							return;
-						}
 					}
 
 					otherPort.fsm.RunEvent(otherPort.on_distance_passive);
@@ -1195,15 +1082,14 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_approaching.OnLeave = delegate(KFSMState to)
 			{
+				if((to != st_extended) && (to != st_push))
+					Events["RetractRing"].active = false;
 			};
 			fsm.AddState(st_approaching);
 
 			st_approaching_passive = new KFSMState("Approached");
 			st_approaching_passive.OnEnter = delegate(KFSMState from)
 			{
-				Events["TogglePort"].active = false;
-				Events["ExtendRing"].active = false;
-
 				DockStatus = st_approaching_passive.name;
 			};
 			st_approaching_passive.OnFixedUpdate = delegate
@@ -1225,7 +1111,13 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			{
 				float relevantDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude - correctionVector.magnitude;
 
-				DockDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude.ToString("N2");
+			//	float distance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
+				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
+				float angle = CalculateAngle();
+
+				DockDistance = relevantDistance.ToString();
+				DockAlignment = alignment.ToString();
+				DockAngle = angle.ToString();
 
 // FEHLER, 's gibt noch 'n captureAngle... warum ist uns der egal hier???
 				if(relevantDistance <= captureDistance)
@@ -1250,6 +1142,8 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_push.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_restore)
+					Events["RetractRing"].active = false;
 			};
 			fsm.AddState(st_push);
 
@@ -1264,7 +1158,13 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			{
 				float relevantDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude - correctionVector.magnitude;
 
-				DockDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude.ToString("N2");
+			//	float distance = (otherPort.nodeTransform.position - nodeTransform.position).magnitude;
+				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
+				float angle = CalculateAngle();
+
+				DockDistance = relevantDistance.ToString();
+				DockAlignment = alignment.ToString();
+				DockAngle = angle.ToString();
 
 				if(relevantDistance < (maxExtensionLength - extensionLength))
 					fsm.RunEvent(on_push);
@@ -1294,13 +1194,14 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_restore.OnLeave = delegate(KFSMState to)
 			{
+				if(to != st_approaching)
+					Events["RetractRing"].active = false;
 			};
 			fsm.AddState(st_restore);
 		
 			st_captured = new KFSMState("Captured");
 			st_captured.OnEnter = delegate(KFSMState from)
 			{
-				Events["RetractRing"].active = false;
 				Events["Release"].active = true;
 
 				BuildJoint();
@@ -1395,9 +1296,6 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			st_captured_passive = new KFSMState("Target");
 			st_captured_passive.OnEnter = delegate(KFSMState from)
 			{
-				Events["TogglePort"].active = false;
-				Events["ExtendRing"].active = false;
-
 				DockStatus = st_captured_passive.name;
 			};
 			st_captured_passive.OnFixedUpdate = delegate
@@ -1413,8 +1311,6 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			{
 				DestroyJoint();
 
-				Events["Release"].active = false;
-				Events["PerformDocking"].active = false;
 				Events["RetractRing"].active = true;
 
 				DockStatus = st_released.name;
@@ -1445,8 +1341,10 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 				else
 				{
 					float relevantDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude - correctionVector.magnitude;
-						
-					DockDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude.ToString("N2");
+
+					DockDistance = relevantDistance.ToString();
+					DockAlignment = "-";
+					DockAngle = "-";
 
 					if(relevantDistance > (maxExtensionLength - extensionLength) * 1.4f)
 					{
@@ -1459,6 +1357,7 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			};
 			st_released.OnLeave = delegate(KFSMState to)
 			{
+				ResetDockInfo();
 			};
 			fsm.AddState(st_released);
 		
@@ -1476,7 +1375,6 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 			st_latched.OnLeave = delegate(KFSMState to)
 			{
 				Events["Release"].active = false;
-
 				Events["PerformDocking"].active = false;
 			};
 			fsm.AddState(st_latched);
@@ -1576,10 +1474,10 @@ if(l.target != KSPUtil.FindInPartModel(part.transform, info.targetName))
 
 				extendPosition = 0f;
 
-if(vessel.GetTotalMass() < otherPort.vessel.GetTotalMass()) // FEHLER, ich prüf nur die Masse, "dominant Vessel" prüft noch anderes, finde ich aber nicht so gut
-				DockToVessel(otherPort);
-else
-				otherPort.DockToVessel(this); // FEHLER, nie geprüft ob's ginge
+				if(Vessel.GetDominantVessel(vessel, otherPort.vessel) == otherPort.vessel)
+					DockToVessel(otherPort);
+				else
+					otherPort.DockToVessel(this);
 
 				Destroy(joint);
 				joint = null;
@@ -1632,9 +1530,9 @@ else
 				Events["TogglePort"].guiName = "Activate Port";
 				Events["TogglePort"].active = true;
 
-				Events["ExtendRing"].active = false;
-
 				Events["ToggleAutoFreeDriftMode"].active = false;
+
+				ResetDockInfo();
 
 				DockStatus = st_disabled.name;
 			};
@@ -1650,7 +1548,7 @@ else
 			on_extend = new KFSMEvent("Extend Ring");
 			on_extend.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
 			on_extend.GoToStateOnEvent = st_extending;
-			fsm.AddEvent(on_extend, st_ready);
+			fsm.AddEvent(on_extend, st_ready, st_retracting);
 
 			on_retract = new KFSMEvent("Retract Ring");
 			on_retract.updateMode = KFSMUpdateMode.MANUAL_TRIGGER;
@@ -1761,6 +1659,26 @@ else
 			fsm.AddEvent(on_construction, st_ready, st_extending, st_retracting, st_extended, st_approaching, st_approaching_passive, st_push, st_restore, st_captured, st_captured_passive, st_latched, st_released, st_preparedocking, st_predocked, st_docked, st_preattached);
 		}
 
+		private float CalculateAngle()
+		{
+			Vector3 tvref = nodeTransform.TransformDirection(dockingOrientation);
+			Vector3 tv = otherPort.nodeTransform.TransformDirection(otherPort.dockingOrientation);
+			float angle = Vector3.SignedAngle(tvref, tv, -nodeTransform.forward);
+
+			angle = 360f + angle - (180f / snapCount);
+			angle %= (360f / snapCount);
+			angle -= (180f / snapCount);
+
+			return angle;
+		}
+		
+		private void ResetDockInfo()
+		{
+			DockDistance = "-";
+			DockAlignment = "-";
+			DockAngle = "-";
+		}
+
 		void BuildRingObject()
 		{
 			ringObject = new GameObject();
@@ -1771,8 +1689,6 @@ else
 			ringObject.transform.rotation = ringTransform.transform.rotation;
 
 			ringTransform.parent = ringObject.transform;
-
-//			RingObject.SetActive(true); FEHLER, offenbar unnötig für neue Objekte
 
 			// latest time to initialize this value
 			extendDirection = Quaternion.Inverse(transform.rotation) * nodeTransform.forward;
@@ -1787,28 +1703,6 @@ else
 			Destroy(ringObject);
 		}
 
-/* FEHLER FEHLER
-was nu? das hier oder nicht? eigentlich wär mir fast lieber über den state zu gehen, weil...
-dann wär's "gleicher"...
-
--> ja ok, über den State gehen
-
-		void PackRingObject()
-		{
-			RingObject.GetComponent<Rigidbody>().isKinematic = true;
-			RingObject.GetComponent<Rigidbody>().detectCollisions = false;
-
-			RingObject.transform.parent = transform;
-		}
-
-		void UnpackRingObject()
-		{
-			RingObject.GetComponent<Rigidbody>().isKinematic = false;
-			RingObject.GetComponent<Rigidbody>().detectCollisions = true;
-
-			RingObject.transform.parent = null;
-		}
-*/
 		// calculate position and orientation for st_push / st_restore
 		void CalculateActiveJointRotationAndPosition(ModuleDockingPortEx port, out Quaternion rotation, out Vector3 position)
 		{
@@ -1905,12 +1799,6 @@ Quaternion _captureRotationA, _captureRotationB;
 
 			ringObject.transform.parent = port.transform;
 
-			originalRingObjectLocalPosition = ringObject.transform.localPosition;
-			originalRingObjectLocalRotation = ringObject.transform.localRotation;
-
-		//	RingObject.transform.localPosition = Vector3.zero;
-		//	RingObject.transform.localRotation = new Quaternion(0f, 0f, 1f, 0f);
-// FEHLER, das da oben muss ich ändern, das mit der localPosition... hier probier ich mal was
 _capturePositionA = ringObject.transform.localPosition;
 _capturePositionB =
 	//		RingObject.transform.position =
@@ -2009,10 +1897,6 @@ _captureRotationB =
 // FEHLER, die Modelle sind oft so ein elender Schrott... unglaublich du... -> geht's so???
 joint.anchor = joint.transform.InverseTransformPoint(nodeTransform.position);
 iCapturePosition = -100;
-
-			DockDistance = "-";
-			DockAlignment = "-";
-			DockAngle = "-";
 		}
 
 		private void CalculateJointTarget()
@@ -2025,14 +1909,9 @@ iCapturePosition = -100;
 			jointTargetRotation = Quaternion.Inverse(Quaternion.Inverse(transform.rotation) * targetRotation);
 		}
 
-static bool n1 = true;
-
 		private void DestroyJoint()
 		{
 			// RingObject
-			ringObject.transform.localPosition = originalRingObjectLocalPosition;
-			ringObject.transform.localRotation = originalRingObjectLocalRotation;
-
 			ringObject.transform.parent = null;
 
 			ringObject.GetComponent<Rigidbody>().isKinematic = false;
@@ -2045,14 +1924,10 @@ static bool n1 = true;
 			// ActiveJoint
 			ConfigureRingJoint(ringJoint);
 
-// FEHLER, neu, klären ob's gut ist -> soll das "zurückziehen" nach dem uncapture schöner machen
-if(n1)
-{
 			ringJoint.targetPosition = ringJoint.transform.InverseTransformPoint(ringObject.transform.position + ringObject.transform.rotation * ringJoint.connectedAnchor) - ringJoint.anchor;
 			ringJoint.targetRotation = Quaternion.Inverse(ringJoint.transform.rotation) * ringObject.transform.rotation;
 
 			_pushStep = 1f;
-}
 
 			// Joint
 			Destroy(joint);
