@@ -2255,27 +2255,10 @@ j.xDrive = str;
 		[KSPEvent(guiActive = true, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 2f, guiName = "#autoLOC_6001445")]
 		public void Undock()
 		{
-			Vessel oldvessel = vessel;
-			uint referenceTransformId = vessel.referenceTransformId;
-
 			DoUndock();
 
 			otherPort.fsm.RunEvent(otherPort.on_undock);
 			fsm.RunEvent(on_undock);
-
-			if(oldvessel == FlightGlobals.ActiveVessel)
-			{
-				if(vessel[referenceTransformId] == null)
-					StartCoroutine(WaitAndSwitchFocus());
-			}
-		}
-
-		public IEnumerator WaitAndSwitchFocus()
-		{
-			yield return null;
-
-			FlightGlobals.ForceSetActiveVessel(vessel);
-			FlightInputHandler.SetNeutralControls();
 		}
 
 		[KSPField(isPersistant = true)]
