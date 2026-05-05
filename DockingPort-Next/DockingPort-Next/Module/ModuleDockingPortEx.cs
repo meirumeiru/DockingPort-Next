@@ -601,7 +601,7 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 					maximumForce = f
 				};
 
-				joint.angularXDrive = joint.angularYZDrive = joint.slerpDrive = drive;
+				joint.angularXDrive = joint.angularYZDrive = drive;
 				joint.xDrive = joint.yDrive = joint.zDrive = drive;
 			}
 
@@ -997,13 +997,13 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 
 						if(relevantDistance < detectionDistance)
 						{
-							DockDistance = relevantDistance.ToString();
+							DockDistance = relevantDistance.ToString("F4");
 
 							alignment = Vector3.Angle(nodeTransform.forward, -_otherPort.nodeTransform.forward);
 
 							if((alignment <= approachingAlignment) && (relevantDistance <= approachingDistance))
 							{
-								DockAlignment = alignment.ToString();
+								DockAlignment = alignment.ToString("F3") + "°";
 								DockAngle = "-";
 
 								// we don't expect to see multiple matching ports in the same area
@@ -1055,9 +1055,9 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 				float angle = CalculateAngle();
 
-				DockDistance = relevantDistance.ToString();
-				DockAlignment = alignment.ToString();
-				DockAngle = angle.ToString();
+				DockDistance = relevantDistance.ToString("F4");
+				DockAlignment = alignment.ToString("F3") + "°";
+				DockAngle = angle.ToString("F3") + "°";
 
 				if(relevantDistance < (maxExtensionLength - extensionLength))
 					fsm.RunEvent(on_push);
@@ -1108,9 +1108,9 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 				float angle = CalculateAngle();
 
-				DockDistance = relevantDistance.ToString();
-				DockAlignment = alignment.ToString();
-				DockAngle = angle.ToString();
+				DockDistance = relevantDistance.ToString("F4");
+				DockAlignment = alignment.ToString("F3") + "°";
+				DockAngle = angle.ToString("F3") + "°";
 
 // FEHLER, 's gibt noch 'n captureAngle... warum ist uns der egal hier???
 				if(relevantDistance <= captureDistance)
@@ -1155,9 +1155,9 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 				float alignment = Vector3.Angle(nodeTransform.forward, -otherPort.nodeTransform.forward);
 				float angle = CalculateAngle();
 
-				DockDistance = relevantDistance.ToString();
-				DockAlignment = alignment.ToString();
-				DockAngle = angle.ToString();
+				DockDistance = relevantDistance.ToString("F4");
+				DockAlignment = alignment.ToString("F3") + "°";
+				DockAngle = angle.ToString("F3") + "°";
 
 				if(relevantDistance < (maxExtensionLength - extensionLength))
 					fsm.RunEvent(on_push);
@@ -1270,7 +1270,7 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 						maximumForce = f
 					};
 
-					joint.angularXDrive = joint.angularYZDrive = joint.slerpDrive = drive;
+					joint.angularXDrive = joint.angularYZDrive = drive;
 					joint.xDrive = joint.yDrive = joint.zDrive = drive;
 
 					if(iCapturePosition >= 25)
@@ -1335,7 +1335,7 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 				{
 					float relevantDistance = (otherPort.ringTransform.transform.position - ringObject.transform.position).magnitude - correctionVector.magnitude;
 
-					DockDistance = relevantDistance.ToString();
+					DockDistance = relevantDistance.ToString("F4");
 					DockAlignment = "-";
 					DockAngle = "-";
 
@@ -1732,7 +1732,7 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 			joint.angularXMotion = joint.angularYMotion = joint.angularZMotion = ConfigurableJointMotion.Limited;
 
 			joint.xDrive = joint.yDrive = joint.zDrive =
-			joint.angularXDrive = joint.angularYZDrive = 
+			joint.angularXDrive = joint.angularYZDrive =
 				new JointDrive
 				{
 					positionSpring = 10000f,
