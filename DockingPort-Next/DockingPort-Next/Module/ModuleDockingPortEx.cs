@@ -2183,15 +2183,11 @@ iCapturePosition = -100;
 			otherPort.otherPort = this;
 			otherPort.dockedPartUId = part.flightID;
 
-			DockingHelper.SuspendCameraSwitch(10);
-
 			DockingHelper.DockVessels(this, otherPort);
 		}
 
 		private void DoUndock()
 		{
-			DockingHelper.SuspendCameraSwitch(10);
-
 			DockingHelper.UndockVessels(this, otherPort);
 
 			ConfigurableJoint j = part.gameObject.AddComponent<ConfigurableJoint>();
