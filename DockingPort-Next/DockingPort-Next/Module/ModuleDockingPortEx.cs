@@ -2019,7 +2019,12 @@ iCapturePosition = -100;
 			if(referenceAttachNode != string.Empty)
 				node = part.FindAttachNode(referenceAttachNode);
 
-			Events["ExtendRing"].active = (node == null) || !node.attachedPart;
+			bool isAttached = ((node != null) && node.attachedPart);
+
+			Events["ToggleStartState"].active = !isAttached;
+			Events["ToggleStartState"].guiName = (DockStatus == "Inactive") ? "Start 'Inactive'" : "Start 'Ready'";
+
+			Events["ExtendRing"].active = !isAttached;
 			Events["RetractRing"].active = false;
 		}
 
@@ -2038,7 +2043,13 @@ iCapturePosition = -100;
 		public override void OnCopy(PartModule fromModule)
 		{
 			base.OnCopy(fromModule);
-			EditorResetRing(true);
+
+			ModuleDockingPortEx fromPort = (ModuleDockingPortEx)fromModule;
+
+			Transform _ringTransform = part.FindModelTransform(ringName);
+
+			_ringTransform.localPosition = fromPort.ringOrgLocalPosition;
+			_ringTransform.localRotation = fromPort.ringOrgLocalRotation;
 		}
 
 		public void OnEditorPartEvent(ConstructionEventType evt, Part part)
@@ -2052,6 +2063,9 @@ iCapturePosition = -100;
 					if((node != null) && node.attachedPart)
 					{
 						EditorResetRing(false);
+
+						DockStatus = "Attached";
+						Events["ToggleStartState"].active = false;
 					}
 				}
 				break;
@@ -2063,6 +2077,9 @@ iCapturePosition = -100;
 					if((node != null) && !node.attachedPart)
 					{
 						Events["ExtendRing"].active = true;
+
+						DockStatus = "Ready";
+						Events["ToggleStartState"].active = true;
 					}
 				}
 				break;
@@ -2133,6 +2150,21 @@ iCapturePosition = -100;
 				fsm.RunEvent(on_enable);
 			else
 				fsm.RunEvent(on_disable);
+		}
+
+		[KSPEvent(guiActiveEditor = true)]
+		public void ToggleStartState()
+		{
+			if(DockStatus == "Inactive")
+			{
+				DockStatus = "Ready";
+				Events["ToggleStartState"].guiName = "Start 'Ready'";
+			}
+			else
+			{
+				DockStatus = "Inactive";
+				Events["ToggleStartState"].guiName = "Start 'Inactive'";
+			}
 		}
 
 		[KSPEvent(guiActive = true, guiActiveEditor = true, guiActiveUnfocused = false, guiName = "Extend Ring")]
