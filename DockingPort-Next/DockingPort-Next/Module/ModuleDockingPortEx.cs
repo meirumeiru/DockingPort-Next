@@ -340,16 +340,12 @@ private float _rotStep; private float _transStep; // FEHLER FEHLER, -> progress 
 
 			LoadLookAt(node);
 
-			if(node.HasValue("portName"))
-				portName = node.GetValue("portName");
+			node.TryGetValue("portName", ref portName);
 
-			if(node.HasValue("state"))
-				DockStatus = node.GetValue("state");
-			else
+			if(!node.TryGetValue("state", ref DockStatus))
 				DockStatus = "Ready";
 
-			if(node.HasValue("dockUId"))
-				dockedPartUId = uint.Parse(node.GetValue("dockUId"));
+			node.TryGetValue("dockUId", ref dockedPartUId);
 
 			if(node.HasNode("DOCKEDVESSEL"))
 			{
@@ -2064,7 +2060,13 @@ iCapturePosition = -100;
 					{
 						EditorResetRing(false);
 
-						DockStatus = "Attached";
+						ModuleDockingPortEx _otherPort = node.attachedPart.GetComponent<ModuleDockingPortEx>();
+
+						if(_otherPort)
+							DockStatus = "Attached";
+						else
+							DockStatus = "Inactive";
+
 						Events["ToggleStartState"].active = false;
 					}
 				}
